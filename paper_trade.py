@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 import config
+import os
 
 class PaperTrade:
     def __init__(self, telegram_func=None):
@@ -12,6 +13,63 @@ class PaperTrade:
         self.gun_baslangic_bakiye = config.BUTCE_SANAL
         self.gun_tarihi = datetime.now().date()
         self.gunluk_limit_asildi = False
+        self.peak_bakiye = config.BUTCE_SANAL
+        self.state_file = config.STATE_DOSYA
+        
+        # State'i yükle veya sıfırla
+        self._load_state()
+    
+    def _save_state(self):
+        """Bakiye, pozisyonlar, cooldown vb. durumu kaydet"""
+        state = {
+            "bakiye": self.bakiye,
+            "pozisyonlar": self.pozisyonlar,
+            "islem_gecmisi": self.islem_gecmisi,
+            "cooldown": self.cooldown,
+            "gun_baslangic_bakiye": self.gun_baslangic_bakiye,
+            "gun_tarihi": self.gun_tarihi.isoformat(),
+            "gunluk_limit_asildi": self.gunluk_limit_asildi,
+            "peak_bakiye": self.peak_bakiye
+        }
+        
+        try:
+            with open(self.state_file, "w") as f:
+                json.dump(state, f)
+            print("✅ State kaydedildi")
+        except Exception as e:
+            print(f"⚠️ State kaydetme hatası: {e}")
+    
+    def _load_state(self):
+        """State'i yükle, yoksa sıfırla"""
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state = json.load(f)
+                
+                self.bakiye = state.get("bakiye", config.BUTCE_SANAL)
+                self.pozisyonlar = state.get("pozisyonlar", [])
+                self.islem_gecmisi = state.get("islem_gecmisi", [])
+                self.cooldown = state.get("cooldown", {})
+                self.gun_baslangic_bakiye = state.get("gun_baslangic_bakiye", config.BUTCE_SANAL)
+                self.gun_tarihi = datetime.fromisoformat(state.get("gun_tarihi", datetime.now().date().isoformat()))
+                self.gunluk_limit_asildi = state.get("gunluk_limit_asildi", False)
+                self.peak_bakiye = state.get("peak_bakiye", config.BUTCE_SANAL)
+                
+                print(f"🔄 State yüklendi (Bakiye: ${self.bakiye:.2f})")
+                return
+            except Exception as e:
+                print(f"⚠️ State yükleme hatası: {e}")
+        
+        # State yoksa sıfırla
+        self.bakiye = config.BUTCE_SANAL
+        self.pozisyonlar = []
+        self.islem_gecmisi = []
+        self.cooldown = {}
+        self.gun_baslangic_bakiye = config.BUTCE_SANAL
+        self.gun_tarihi = datetime.now().date()
+        self.gunluk_limit_asildi = False
+        self.peak_bakiye = config.BUTCE_SANAL
+        print("🆕 Yeni state başlatıldı")
     
     def gunluk_kontrol(self):
         """Gün değiştiyse sayaçları sıfırlar; limit aşıldıysa True döner"""
@@ -38,8 +96,29 @@ class PaperTrade:
             return True
         return False
     
+    def _max_drawdown_kontrol(self):
+        """Peak bakiyeden %15 düşerse yeni işlem açılmaz"""
+        if self.bakiye < self.peak_bakiye * (1 - config.MAX_DRAWDOWN):
+            if self.telegram:
+                self.telegram(
+                    f"⚠️ <b>MAX DRAWDOWN LİMİTİ AŞILDI</b>\n\n"
+                    f"📉 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
+                    f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek"
+                )
+            return True
+        return False
+    
+    def _adaptive_pozisyon_hesapla(self):
+        """Bakiyeye göre pozisyon büyüklüğü hesapla"""
+        # Bakiyenin %10'u, ama $2'nin altında olmaz
+        adaptive_tutar = min(
+            self.bakiye * config.POZISYON_ORANI,
+            config.ISLEM_BASINA
+        )
+        return max(adaptive_tutar, config.MIN_ISLEM_TUTAR)
+    
     def sl_tp_hesapla(self, entry, atr, direction, mrc_mid=None):
-        """RR bug fix: TP3 artık MRC kanal ortasına dayalı"""
+        """RR fix: TP3 artık MRC kanal ortasına dayalı"""
         one_r = atr * config.ATR_CARPI
         max_sl = entry * config.MAX_SL_YUZDE
         sl_mesafe = min(one_r, max_sl)
@@ -98,6 +177,10 @@ class PaperTrade:
         if self.gunluk_kontrol():
             return False
         
+        # Max drawdown kontrolü
+        if self._max_drawdown_kontrol():
+            return False
+        
         # Cooldown kontrolü
         if self.cooldown_kontrol(symbol):
             return False
@@ -112,15 +195,18 @@ class PaperTrade:
         if len(self.pozisyonlar) >= config.MAX_POZISYON:
             return False
         
-        # 🆕 Aynı yönde pozisyon sayısı kontrolü (Korelasyon risk yönetimi)
+        # Aynı yönde pozisyon sayısı kontrolü
         ayni_yon_sayisi = sum(1 for poz in self.pozisyonlar if poz['direction'] == direction)
         if ayni_yon_sayisi >= config.MAX_AYNI_YON:
             print(f"⚠️ Aynı yönde max pozisyon ({config.MAX_AYNI_YON}) dolu - {direction}")
             return False
         
         # Bakiye kontrolü
-        if self.bakiye < config.ISLEM_BASINA:
+        if self.bakiye < config.MIN_ISLEM_TUTAR:
             return False
+        
+        # 🆕 Adaptive pozisyon büyüklüğü
+        adaptive_tutar = self._adaptive_pozisyon_hesapla()
         
         levels = self.sl_tp_hesapla(entry, atr, direction, mrc_mid)
         
@@ -139,7 +225,7 @@ class PaperTrade:
             'tp2': levels['tp2'],
             'tp3': levels['tp3'],
             'rr': levels['rr'],
-            'miktar': config.ISLEM_BASINA,
+            'miktar': adaptive_tutar,
             'acilis_zamani': datetime.now().isoformat(),
             'tp1_tetiklendi': False,
             'tp2_tetiklendi': False,
@@ -147,7 +233,7 @@ class PaperTrade:
         }
         
         self.pozisyonlar.append(pozisyon)
-        self.bakiye -= config.ISLEM_BASINA
+        self.bakiye -= adaptive_tutar
         
         if self.telegram:
             self.telegram(
@@ -160,6 +246,8 @@ class PaperTrade:
                 f"📈 RR: {levels['rr']:.2f}"
             )
         
+        # State'i kaydet
+        self._save_state()
         return True
     
     def pozisyon_guncelle(self, symbol, current_price):
@@ -209,10 +297,24 @@ class PaperTrade:
                     self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], "STOP")
                     continue
     
+    def _slippage_uygula(self, fiyat, direction):
+        """Slippage uygula (gerçekçi fiyat kayması)"""
+        # Her işlemde %0.05 fiyat kayması (aleyhimize)
+        if direction == "LONG":
+            # LONG: entry yüksek, exit düşük
+            return fiyat * (1 + config.SLIPPAGE)
+        else:
+            # SHORT: entry düşük, exit yüksek
+            return fiyat * (1 - config.SLIPPAGE)
+    
     def pozisyon_kapat(self, poz, exit_price, yuzde, sebep):
         direction = poz['direction']
         entry = poz['entry']
         miktar = poz['miktar'] * (yuzde / 100)
+        
+        # 🆕 Slippage uygula
+        entry = self._slippage_uygula(entry, direction)
+        exit_price = self._slippage_uygula(exit_price, "LONG" if direction == "SHORT" else "SHORT")
         
         if direction == "LONG":
             pnl = (exit_price - entry) / entry * miktar * config.KALDIRAC
@@ -222,6 +324,9 @@ class PaperTrade:
         komisyon = miktar * config.KOMISYON * 2
         net_pnl = pnl - komisyon
         self.bakiye += miktar + net_pnl
+        
+        # Peak bakiyeyi güncelle
+        self.peak_bakiye = max(self.peak_bakiye, self.bakiye)
         
         islem = {
             'symbol': poz['symbol'],
@@ -249,6 +354,9 @@ class PaperTrade:
         
         if yuzde == 100 or poz['kalan_yuzde'] <= 0:
             self.pozisyonlar.remove(poz)
+        
+        # State'i kaydet
+        self._save_state()
     
     def rapor(self):
         print("\n" + "=" * 60)
@@ -263,7 +371,6 @@ class PaperTrade:
         gunluk_kayip = self.gun_baslangic_bakiye - self.bakiye
         gunluk_limit = self.gun_baslangic_bakiye * config.GUNLUK_KAYIP_LIMITI
         
-        # Yön dağılımı
         long_sayisi = sum(1 for poz in self.pozisyonlar if poz['direction'] == "LONG")
         short_sayisi = sum(1 for poz in self.pozisyonlar if poz['direction'] == "SHORT")
         
@@ -271,6 +378,7 @@ class PaperTrade:
         print(f"📈 Açık pozisyon: {len(self.pozisyonlar)} (LONG: {long_sayisi}, SHORT: {short_sayisi})")
         print(f"⏳ Cooldown'daki coin: {len(self.cooldown)}")
         print(f"📉 Bugünkü kayıp: ${gunluk_kayip:.2f} / ${gunluk_limit:.2f} limit")
+        print(f"📉 Max drawdown: ${self.peak_bakiye * config.MAX_DRAWDOWN:.2f} (Peak: ${self.peak_bakiye:.2f})")
         print(f"📊 Toplam işlem: {toplam_islem}")
         print(f"✅ Kazanılan: {kazanilan}")
         print(f"❌ Kaybedilen: {kaybedilen}")
@@ -280,4 +388,5 @@ class PaperTrade:
             print(f"🎯 Win rate: %{win_rate:.1f}")
         
         print(f"💵 Toplam PnL: ${toplam_pnl:+.2f}")
+        print(f"🎯 Peak bakiye: ${self.peak_bakiye:.2f}")
         print("=" * 60)

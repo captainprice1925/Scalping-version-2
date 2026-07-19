@@ -3,12 +3,7 @@ import pandas as pd
 import config
 
 def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
-    """
-    Linear Regression Channel hesaplar
-    
-    Returns:
-        DataFrame with mrc_mid, mrc_u2, mrc_l2, mrc_slope_pct
-    """
+    """Linear Regression Channel hesaplar (±1.5 std-dev)"""
     df = df.copy()
     close = df['close'].values
     
@@ -25,7 +20,6 @@ def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
         x = np.arange(length)
         y = window
         
-        # Linear Regression
         x_mean = x.mean()
         y_mean = y.mean()
         
@@ -37,19 +31,13 @@ def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
         
         mid = intercept + slope * (length - 1)
         
-        # Residuals
         y_pred = intercept + slope * x
         residuals = y - y_pred
-        
-        # Standard Deviation
         std = np.std(residuals, ddof=ddof)
         
-        # Channels
         mrc_mid[i] = mid
         mrc_u2[i] = mid + 1.5 * std
         mrc_l2[i] = mid - 1.5 * std
-        
-        # Slope Normalize
         mrc_slope_pct[i] = slope / close[i]
     
     df['mrc_mid'] = mrc_mid
@@ -60,9 +48,7 @@ def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
     return df
 
 def calc_atr(df, period=config.ATR_PERIOD):
-    """
-    Average True Range - Wilder's Smoothed MA
-    """
+    """Average True Range - Wilder's Smoothed MA"""
     df = df.copy()
     
     high = df['high']
@@ -75,32 +61,25 @@ def calc_atr(df, period=config.ATR_PERIOD):
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     
     atr = tr.ewm(alpha=1/period, adjust=False).mean()
-    
     df['atr'] = atr
     
     return df
 
 def calc_rsi(df, period=config.RSI_PERIOD):
-    """
-    RSI hesaplar
-    """
+    """RSI hesaplar (Wilder's Smoothing - TradingView standardı)"""
     df = df.copy()
-    
     delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    
-    rs = gain / loss
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+    rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
-    
     df['rsi'] = rsi
-    
     return df
 
 def full_analysis(df):
-    """
-    Tüm indikatörleri uygular
-    """
+    """Tüm indikatörleri uygular"""
     df = calc_mrc(df)
     df = calc_atr(df)
     df = calc_rsi(df)

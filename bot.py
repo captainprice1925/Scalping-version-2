@@ -13,6 +13,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 def send_telegram(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram token/chat ID ayarlanmamış")
         return
     
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -23,23 +24,31 @@ def send_telegram(message):
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            print("✅ Telegram gönderildi")
+        else:
+            print(f"❌ Telegram HTTP hatası: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"⚠️ Telegram hatası: {e}")
+        print(f"⚠️ Telegram bağlantı hatası: {e}")
 
 def main():
-    send_telegram(
-        "🚀 <b>SCALP BOT BAŞLATILDI</b>\n\n"
-        f"💰 Bakiye: ${config.BUTCE_SANAL}\n"
-        f"⚡ Kaldıraç: {config.KALDIRAC}x\n"
-        f"🛡️ Max pozisyon: {config.MAX_POZISYON}\n"
-        f"🎯 Coin sayısı: {len(config.COINS)}"
-    )
-    
     print("=" * 60)
     print("🚀 SCALP BOT BAŞLATILIYOR (Paper Trade)")
     print("=" * 60)
     
+    # ÖNCE PaperTrade oluştur (state yüklenecek)
     pt = PaperTrade(telegram_func=send_telegram)
+    
+    # SONRA gerçek bakiyeyle başlangıç mesajı gönder
+    send_telegram(
+        "🚀 <b>SCALP BOT BAŞLATILDI</b>\n\n"
+        f"💰 Bakiye: ${pt.bakiye:.2f}\n"
+        f"📊 Geçmiş işlem: {len(pt.islem_gecmisi)}\n"
+        f"📈 Açık pozisyon: {len(pt.pozisyonlar)}\n"
+        f"⚡ Kaldıraç: {config.KALDIRAC}x\n"
+        f"🛡️ Max pozisyon: {config.MAX_POZISYON}\n"
+        f"🎯 Coin sayısı: {len(config.COINS)}"
+    )
     
     while True:
         try:
@@ -74,8 +83,8 @@ def main():
                     print(f"✅ {sinyal} sinyali!")
                     entry = df_15m['close'].iloc[-1]
                     atr = df_15m['atr'].iloc[-1]
-                    mrc_mid = df_15m['mrc_mid'].iloc[-1]  # KRİTİK FIX
-                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, mrc_mid)  # mrc_mid geçirildi
+                    mrc_mid = df_15m['mrc_mid'].iloc[-1]
+                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, mrc_mid)
                 else:
                     print("⏳ Sinyal yok")
                 

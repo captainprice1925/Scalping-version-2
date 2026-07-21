@@ -1,73 +1,51 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import config
-import os
+import state_store
 
 class PaperTrade:
     def __init__(self, telegram_func=None):
-        self.bakiye = config.BUTCE_SANAL
-        self.pozisyonlar = []
-        self.islem_gecmisi = []
         self.telegram = telegram_func
-        self.cooldown = {}
-        self.gun_tarihi = datetime.now().date()
-        self.gunluk_gerceklesen_pnl = 0.0   # 🆕 sadece kapanan işlemlerin PnL'i
-        self.gunluk_limit_asildi = False
-        self.peak_bakiye = config.BUTCE_SANAL
-        self.state_file = config.STATE_DOSYA
         
-        self._load_state()
+        # State'i Gist'ten yükle
+        kayitli = state_store.state_yukle()
+        
+        if kayitli:
+            self.bakiye = kayitli.get('bakiye', config.BUTCE_SANAL)
+            self.pozisyonlar = kayitli.get('pozisyonlar', [])
+            self.islem_gecmisi = kayitli.get('islem_gecmisi', [])
+            self.cooldown = {s: datetime.fromisoformat(d) for s, d in kayitli.get('cooldown', {}).items()}
+            self.gun_baslangic_bakiye = kayitli.get('gun_baslangic_bakiye', config.BUTCE_SANAL)
+            self.gun_tarihi = date.fromisoformat(kayitli.get('gun_tarihi', datetime.now().date().isoformat()))
+            self.gunluk_limit_asildi = kayitli.get('gunluk_limit_asildi', False)
+            self.gunluk_gerceklesen_pnl = kayitli.get('gunluk_gerceklesen_pnl', 0.0)
+            self.peak_bakiye = kayitli.get('peak_bakiye', config.BUTCE_SANAL)
+            print(f"✅ Kayıtlı state yüklendi (Bakiye: ${self.bakiye:.2f}, {len(self.pozisyonlar)} açık pozisyon, {len(self.islem_gecmisi)} geçmiş işlem)")
+        else:
+            self.bakiye = config.BUTCE_SANAL
+            self.pozisyonlar = []
+            self.islem_gecmisi = []
+            self.cooldown = {}
+            self.gun_baslangic_bakiye = config.BUTCE_SANAL
+            self.gun_tarihi = datetime.now().date()
+            self.gunluk_limit_asildi = False
+            self.gunluk_gerceklesen_pnl = 0.0
+            self.peak_bakiye = config.BUTCE_SANAL
+            print("🆕 Yeni state başlatıldı")
     
-    def _save_state(self):
-        """Bakiye, pozisyonlar, cooldown vb. durumu kaydet"""
-        state = {
-            "bakiye": self.bakiye,
-            "pozisyonlar": self.pozisyonlar,
-            "islem_gecmisi": self.islem_gecmisi,
-            "cooldown": self.cooldown,
-            "gun_tarihi": self.gun_tarihi.isoformat(),
-            "gunluk_gerceklesen_pnl": self.gunluk_gerceklesen_pnl,
-            "gunluk_limit_asildi": self.gunluk_limit_asildi,
-            "peak_bakiye": self.peak_bakiye
-        }
-        
-        try:
-            with open(self.state_file, "w") as f:
-                json.dump(state, f)
-            print("✅ State kaydedildi")
-        except Exception as e:
-            print(f"⚠️ State kaydetme hatası: {e}")
-    
-    def _load_state(self):
-        """State'i yükle, yoksa sıfırla"""
-        if os.path.exists(self.state_file):
-            try:
-                with open(self.state_file, "r") as f:
-                    state = json.load(f)
-                
-                self.bakiye = state.get("bakiye", config.BUTCE_SANAL)
-                self.pozisyonlar = state.get("pozisyonlar", [])
-                self.islem_gecmisi = state.get("islem_gecmisi", [])
-                self.cooldown = state.get("cooldown", {})
-                self.gun_tarihi = datetime.fromisoformat(state.get("gun_tarihi", datetime.now().date().isoformat()))
-                self.gunluk_gerceklesen_pnl = state.get("gunluk_gerceklesen_pnl", 0.0)
-                self.gunluk_limit_asildi = state.get("gunluk_limit_asildi", False)
-                self.peak_bakiye = state.get("peak_bakiye", config.BUTCE_SANAL)
-                
-                print(f"🔄 State yüklendi (Bakiye: ${self.bakiye:.2f}, Günlük PnL: ${self.gunluk_gerceklesen_pnl:+.2f})")
-                return
-            except Exception as e:
-                print(f"⚠️ State yükleme hatası: {e}")
-        
-        self.bakiye = config.BUTCE_SANAL
-        self.pozisyonlar = []
-        self.islem_gecmisi = []
-        self.cooldown = {}
-        self.gun_tarihi = datetime.now().date()
-        self.gunluk_gerceklesen_pnl = 0.0
-        self.gunluk_limit_asildi = False
-        self.peak_bakiye = config.BUTCE_SANAL
-        print("🆕 Yeni state başlatıldı")
+    def _kaydet(self):
+        """State'i Gist'e kaydet"""
+        state_store.state_kaydet({
+            'bakiye': self.bakiye,
+            'pozisyonlar': self.pozisyonlar,
+            'islem_gecmisi': self.islem_gecmisi,
+            'cooldown': {s: d.isoformat() for s, d in self.cooldown.items()},
+            'gun_baslangic_bakiye': self.gun_baslangic_bakiye,
+            'gun_tarihi': self.gun_tarihi.isoformat(),
+            'gunluk_limit_asildi': self.gunluk_limit_asildi,
+            'gunluk_gerceklesen_pnl': self.gunluk_gerceklesen_pnl,
+            'peak_bakiye': self.peak_bakiye,
+        })
     
     def gunluk_kontrol(self):
         """Gün değiştiyse sıfırlar; GERÇEKLEŞEN kayıp limiti aştıysa True döner"""
@@ -78,6 +56,7 @@ class PaperTrade:
             self.gunluk_gerceklesen_pnl = 0.0
             self.gunluk_limit_asildi = False
             print("📅 Yeni gün - günlük P&L sıfırlandı")
+            self._kaydet()  # 🆕 Yeni günü kaydet
         
         gunluk_limit = config.BUTCE_SANAL * config.GUNLUK_KAYIP_LIMITI
         gunluk_kayip = max(0, -self.gunluk_gerceklesen_pnl)
@@ -91,6 +70,7 @@ class PaperTrade:
                         f"📉 Bugünkü gerçekleşen kayıp: ${gunluk_kayip:.2f} (limit: ${gunluk_limit:.2f})\n"
                         f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek"
                     )
+                self._kaydet()  # 🆕 Limit durumunu kaydet
             return True
         return False
     
@@ -234,7 +214,7 @@ class PaperTrade:
                 f"📈 RR: {levels['rr']:.2f}"
             )
         
-        self._save_state()
+        self._kaydet()  # 🆕 Pozisyon açılışını kaydet
         return True
     
     def pozisyon_guncelle(self, symbol, current_price):
@@ -307,7 +287,7 @@ class PaperTrade:
         komisyon = miktar * config.KOMISYON * 2
         net_pnl = pnl - komisyon
         self.bakiye += miktar + net_pnl
-        self.gunluk_gerceklesen_pnl += net_pnl   # 🆕 sadece gerçekleşen PnL sayılır
+        self.gunluk_gerceklesen_pnl += net_pnl
         
         self.peak_bakiye = max(self.peak_bakiye, self.bakiye)
         
@@ -338,7 +318,7 @@ class PaperTrade:
         if yuzde == 100 or poz['kalan_yuzde'] <= 0:
             self.pozisyonlar.remove(poz)
         
-        self._save_state()
+        self._kaydet()  # 🆕 Pozisyon kapanışını kaydet
     
     def rapor(self):
         print("\n" + "=" * 60)

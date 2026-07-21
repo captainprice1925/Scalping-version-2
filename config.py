@@ -27,14 +27,14 @@ KALDIRAC = 10               # 10x
 MAX_POZISYON = 10           # Max 10 açık işlem (toplam)
 MAX_AYNI_YON = 5            # Aynı yönde (LONG veya SHORT) max pozisyon
 
-# 🆕 Adaptive Position Sizing - Bakiye azaldıkça işlem küçülür
+# Adaptive Position Sizing - Bakiye azaldıkça işlem küçülür
 POZISYON_ORANI = 0.10       # Bakiyenin max %10'u tek işlemde
 MIN_ISLEM_TUTAR = 2         # Minimum $2 (daha küçük işlem anlamsız)
 
 # Günlük kayıp limiti
 GUNLUK_KAYIP_LIMITI = 0.05  # %5 - günlük bu oranda kayıpta yeni işlem açılmaz
 
-# 🆕 Max Drawdown - Peak bakiyeden %15 düşerse her şey durur
+# Max Drawdown - Peak bakiyeden %15 düşerse her şey durur
 MAX_DRAWDOWN = 0.15         # %15 - tüm zamanların en yüksek bakiyesinden düşüş
 
 # SL/TP (ATR bazlı + %2 cap)
@@ -62,13 +62,10 @@ MIN_RR = 3.0                # TP3 RR >= 3.0
 # Komisyon
 KOMISYON = 0.0008           # %0.08 (açılış + kapanış)
 
-# 🆕 Slippage simülasyonu (gerçekçi test için)
+# Slippage simülasyonu (gerçekçi test için)
 SLIPPAGE = 0.0005           # %0.05 fiyat kayması (her işlemde aleyhimize)
 
 # Tarama aralığı (saniye)
 TARAMA_ARALIGI = 60         # 1 dakikada bir tara
-
-# 🆕 State persistence dosyası
-STATE_DOSYA = "bot_state.json"
 
 print("✅ Config yüklendi")

@@ -3,9 +3,16 @@ import pandas as pd
 import config
 
 def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
-    """Linear Regression Channel hesaplar (±1.5 std-dev)"""
+    """
+    Mean Reversion Channel (Gerçek MRC)
+    - Orta çizgi: EMA(length) 
+    - Üst/alt bant: EMA ± ATR * 2.0 (volatilite uyumlu)
+    - Slope: EMA'nın son 5 bar'daki değişim oranı
+    """
     df = df.copy()
     close = df['close'].values
+    high = df['high'].values
+    low = df['low'].values
     
     n = len(close)
     mrc_mid = np.full(n, np.nan)
@@ -13,32 +20,28 @@ def calc_mrc(df, length=config.MRC_LENGTH, tv_mode=True):
     mrc_l2 = np.full(n, np.nan)
     mrc_slope_pct = np.full(n, np.nan)
     
-    ddof = 1 if tv_mode else 0
+    # 1. EMA hesapla (orta çizgi - ortalama)
+    ema = pd.Series(close).ewm(span=length, adjust=False).mean().values
     
-    for i in range(length - 1, n):
-        window = close[i - length + 1 : i + 1]
-        x = np.arange(length)
-        y = window
+    # 2. ATR hesapla (bant genişliği için - volatilite)
+    tr1 = pd.Series(high) - pd.Series(low)
+    tr2 = (pd.Series(high) - pd.Series(close).shift(1)).abs()
+    tr3 = (pd.Series(low) - pd.Series(close).shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.ewm(alpha=1/config.ATR_PERIOD, adjust=False).mean().values
+    
+    # 3. MRC bantlarını hesapla
+    for i in range(length, n):
+        mrc_mid[i] = ema[i]
+        mrc_u2[i] = ema[i] + (atr[i] * 2.0)  # Üst bant: EMA + 2*ATR
+        mrc_l2[i] = ema[i] - (atr[i] * 2.0)  # Alt bant: EMA - 2*ATR
         
-        x_mean = x.mean()
-        y_mean = y.mean()
-        
-        cov_xy = np.sum((x - x_mean) * (y - y_mean)) / length
-        var_x = np.sum((x - x_mean) ** 2) / length
-        
-        slope = cov_xy / var_x
-        intercept = y_mean - slope * x_mean
-        
-        mid = intercept + slope * (length - 1)
-        
-        y_pred = intercept + slope * x
-        residuals = y - y_pred
-        std = np.std(residuals, ddof=ddof)
-        
-        mrc_mid[i] = mid
-        mrc_u2[i] = mid + 1.5 * std
-        mrc_l2[i] = mid - 1.5 * std
-        mrc_slope_pct[i] = slope / close[i]
+        # Slope: Son 5 bar'daki EMA değişim oranı (%)
+        if i >= 5:
+            slope_change = (ema[i] - ema[i-5]) / ema[i-5]
+            mrc_slope_pct[i] = slope_change
+        else:
+            mrc_slope_pct[i] = 0.0
     
     df['mrc_mid'] = mrc_mid
     df['mrc_u2'] = mrc_u2

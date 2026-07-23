@@ -7,7 +7,6 @@ class PaperTrade:
     def __init__(self, telegram_func=None):
         self.telegram = telegram_func
         
-        # State'i Gist'ten yükle
         kayitli = state_store.state_yukle()
         
         if kayitli:
@@ -20,6 +19,7 @@ class PaperTrade:
             self.gunluk_limit_asildi = kayitli.get('gunluk_limit_asildi', False)
             self.gunluk_gerceklesen_pnl = kayitli.get('gunluk_gerceklesen_pnl', 0.0)
             self.peak_bakiye = kayitli.get('peak_bakiye', config.BUTCE_SANAL)
+            self.drawdown_limit_asildi = kayitli.get('drawdown_limit_asildi', False)
             print(f"✅ Kayıtlı state yüklendi (Bakiye: ${self.bakiye:.2f}, {len(self.pozisyonlar)} açık pozisyon, {len(self.islem_gecmisi)} geçmiş işlem)")
         else:
             self.bakiye = config.BUTCE_SANAL
@@ -31,10 +31,10 @@ class PaperTrade:
             self.gunluk_limit_asildi = False
             self.gunluk_gerceklesen_pnl = 0.0
             self.peak_bakiye = config.BUTCE_SANAL
+            self.drawdown_limit_asildi = False
             print("🆕 Yeni state başlatıldı")
     
     def _kaydet(self):
-        """State'i Gist'e kaydet"""
         state_store.state_kaydet({
             'bakiye': self.bakiye,
             'pozisyonlar': self.pozisyonlar,
@@ -45,10 +45,10 @@ class PaperTrade:
             'gunluk_limit_asildi': self.gunluk_limit_asildi,
             'gunluk_gerceklesen_pnl': self.gunluk_gerceklesen_pnl,
             'peak_bakiye': self.peak_bakiye,
+            'drawdown_limit_asildi': self.drawdown_limit_asildi,
         })
     
     def gunluk_kontrol(self):
-        """Gün değiştiyse sıfırlar; GERÇEKLEŞEN kayıp limiti aştıysa True döner"""
         bugun = datetime.now().date()
         
         if bugun != self.gun_tarihi:
@@ -75,19 +75,34 @@ class PaperTrade:
         return False
     
     def _max_drawdown_kontrol(self):
-        """Peak bakiyeden %15 düşerse yeni işlem açılmaz"""
+        """Peak bakiyeden %15 düşerse yeni işlem açılmaz - BUG FIX: sadece bir kez mesaj"""
         if self.bakiye < self.peak_bakiye * (1 - config.MAX_DRAWDOWN):
-            if self.telegram:
-                self.telegram(
-                    f"⚠️ <b>MAX DRAWDOWN LİMİTİ AŞILDI</b>\n\n"
-                    f"📉 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
-                    f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek"
-                )
+            # 🆕 Flag kontrolü - sadece bir kez mesaj gönder
+            if not self.drawdown_limit_asildi:
+                self.drawdown_limit_asildi = True
+                if self.telegram:
+                    self.telegram(
+                        f"⚠️ <b>MAX DRAWDOWN LİMİTİ AŞILDI</b>\n\n"
+                        f"📉 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
+                        f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek\n"
+                        f"💡 Bakiye toparlanana kadar yeni işlem açılmayacak"
+                    )
+                self._kaydet()
             return True
-        return False
+        else:
+            # Bakiye toparlandıysa flag'i resetle
+            if self.drawdown_limit_asildi:
+                self.drawdown_limit_asildi = False
+                if self.telegram:
+                    self.telegram(
+                        f"✅ <b>DRAWDOWN TOPARLANDI</b>\n\n"
+                        f"💰 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
+                        f"🚀 Yeni işlemler tekrar aktif!"
+                    )
+                self._kaydet()
+            return False
     
     def _adaptive_pozisyon_hesapla(self):
-        """Bakiyeye göre pozisyon büyüklüğü hesapla"""
         adaptive_tutar = min(
             self.bakiye * config.POZISYON_ORANI,
             config.ISLEM_BASINA
@@ -95,7 +110,6 @@ class PaperTrade:
         return max(adaptive_tutar, config.MIN_ISLEM_TUTAR)
     
     def sl_tp_hesapla(self, entry, atr, direction, mrc_mid=None):
-        """RR fix: TP3 artık MRC kanal ortasına dayalı"""
         one_r = atr * config.ATR_CARPI
         max_sl = entry * config.MAX_SL_YUZDE
         sl_mesafe = min(one_r, max_sl)
@@ -269,7 +283,6 @@ class PaperTrade:
                 self._kaydet()
     
     def _slippage_uygula(self, fiyat, direction):
-        """Slippage uygula (gerçekçi fiyat kayması)"""
         if direction == "LONG":
             return fiyat * (1 + config.SLIPPAGE)
         else:
@@ -307,7 +320,6 @@ class PaperTrade:
         }
         self.islem_gecmisi.append(islem)
         
-        # STOP ile tam kapanırsa cooldown ekle
         if sebep == "STOP" and poz['kalan_yuzde'] <= yuzde:
             self.cooldown_ekle(poz['symbol'], dakika=60)
         
@@ -320,10 +332,8 @@ class PaperTrade:
                 f"🎯 Kapanan: %{yuzde} (Kalan: %{max(0, poz['kalan_yuzde'] - yuzde)})"
             )
         
-        # BUG FIX: KALAN YÜZDEYİ GÜNCELLE
         poz['kalan_yuzde'] -= yuzde
         
-        # Pozisyon tamamen kapandıysa listeden çıkar
         if poz['kalan_yuzde'] <= 0:
             try:
                 self.pozisyonlar.remove(poz)

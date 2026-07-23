@@ -56,7 +56,7 @@ class PaperTrade:
             self.gunluk_gerceklesen_pnl = 0.0
             self.gunluk_limit_asildi = False
             print("📅 Yeni gün - günlük P&L sıfırlandı")
-            self._kaydet()  # 🆕 Yeni günü kaydet
+            self._kaydet()
         
         gunluk_limit = config.BUTCE_SANAL * config.GUNLUK_KAYIP_LIMITI
         gunluk_kayip = max(0, -self.gunluk_gerceklesen_pnl)
@@ -70,7 +70,7 @@ class PaperTrade:
                         f"📉 Bugünkü gerçekleşen kayıp: ${gunluk_kayip:.2f} (limit: ${gunluk_limit:.2f})\n"
                         f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek"
                     )
-                self._kaydet()  # 🆕 Limit durumunu kaydet
+                self._kaydet()
             return True
         return False
     
@@ -214,7 +214,7 @@ class PaperTrade:
                 f"📈 RR: {levels['rr']:.2f}"
             )
         
-        self._kaydet()  # 🆕 Pozisyon açılışını kaydet
+        self._kaydet()
         return True
     
     def pozisyon_guncelle(self, symbol, current_price):
@@ -223,22 +223,23 @@ class PaperTrade:
                 continue
             
             direction = poz['direction']
+            pozisyon_degisti = False
             
             if direction == "LONG":
                 if current_price >= poz['tp3']:
-                    self.pozisyon_kapat(poz, current_price, 100, "TP3")
+                    self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], "TP3")
                     continue
                 if current_price >= poz['tp2'] and not poz['tp2_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP2_KAPANMA, "TP2")
                     poz['sl'] = poz['tp1']
                     poz['tp2_tetiklendi'] = True
-                    poz['kalan_yuzde'] -= config.TP2_KAPANMA
+                    pozisyon_degisti = True
                     continue
                 if current_price >= poz['tp1'] and not poz['tp1_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP1_KAPANMA, "TP1")
                     poz['sl'] = poz['entry'] * (1 + config.KOMISYON)
                     poz['tp1_tetiklendi'] = True
-                    poz['kalan_yuzde'] -= config.TP1_KAPANMA
+                    pozisyon_degisti = True
                     continue
                 if current_price <= poz['sl']:
                     self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], "STOP")
@@ -246,23 +247,26 @@ class PaperTrade:
             
             elif direction == "SHORT":
                 if current_price <= poz['tp3']:
-                    self.pozisyon_kapat(poz, current_price, 100, "TP3")
+                    self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], "TP3")
                     continue
                 if current_price <= poz['tp2'] and not poz['tp2_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP2_KAPANMA, "TP2")
                     poz['sl'] = poz['tp1']
                     poz['tp2_tetiklendi'] = True
-                    poz['kalan_yuzde'] -= config.TP2_KAPANMA
+                    pozisyon_degisti = True
                     continue
                 if current_price <= poz['tp1'] and not poz['tp1_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP1_KAPANMA, "TP1")
                     poz['sl'] = poz['entry'] * (1 - config.KOMISYON)
                     poz['tp1_tetiklendi'] = True
-                    poz['kalan_yuzde'] -= config.TP1_KAPANMA
+                    pozisyon_degisti = True
                     continue
                 if current_price >= poz['sl']:
                     self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], "STOP")
                     continue
+            
+            if pozisyon_degisti:
+                self._kaydet()
     
     def _slippage_uygula(self, fiyat, direction):
         """Slippage uygula (gerçekçi fiyat kayması)"""
@@ -303,7 +307,8 @@ class PaperTrade:
         }
         self.islem_gecmisi.append(islem)
         
-        if sebep == "STOP" and yuzde == 100:
+        # STOP ile tam kapanırsa cooldown ekle
+        if sebep == "STOP" and poz['kalan_yuzde'] <= yuzde:
             self.cooldown_ekle(poz['symbol'], dakika=60)
         
         if self.telegram:
@@ -312,13 +317,21 @@ class PaperTrade:
                 f"📊 Entry: {entry:.4f}\n"
                 f"💰 Exit: {exit_price:.4f}\n"
                 f"📈 PnL: ${net_pnl:+.2f}\n"
-                f"🎯 Kapanan: %{yuzde}"
+                f"🎯 Kapanan: %{yuzde} (Kalan: %{max(0, poz['kalan_yuzde'] - yuzde)})"
             )
         
-        if yuzde == 100 or poz['kalan_yuzde'] <= 0:
-            self.pozisyonlar.remove(poz)
+        # BUG FIX: KALAN YÜZDEYİ GÜNCELLE
+        poz['kalan_yuzde'] -= yuzde
         
-        self._kaydet()  # 🆕 Pozisyon kapanışını kaydet
+        # Pozisyon tamamen kapandıysa listeden çıkar
+        if poz['kalan_yuzde'] <= 0:
+            try:
+                self.pozisyonlar.remove(poz)
+                print(f"✅ {poz['symbol']} pozisyonu listeden çıkarıldı")
+            except ValueError:
+                print(f"⚠️ {poz['symbol']} zaten listede yok")
+        
+        self._kaydet()
     
     def rapor(self):
         print("\n" + "=" * 60)

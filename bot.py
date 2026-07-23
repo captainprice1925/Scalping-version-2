@@ -91,7 +91,7 @@ def main():
                 current_price = df_15m['close'].iloc[-1]
                 pt.pozisyon_guncelle(symbol, current_price)
                 
-                time.sleep(0.2)
+                time.sleep(1.0)
             
             pt.rapor()
             print(f"\n💤 {config.TARAMA_ARALIGI} saniye bekleniyor...")

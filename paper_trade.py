@@ -35,6 +35,7 @@ class PaperTrade:
             print("🆕 Yeni state başlatıldı")
     
     def _kaydet(self):
+        """State'i Gist'e kaydet"""
         state_store.state_kaydet({
             'bakiye': self.bakiye,
             'pozisyonlar': self.pozisyonlar,
@@ -48,7 +49,16 @@ class PaperTrade:
             'drawdown_limit_asildi': self.drawdown_limit_asildi,
         })
     
+    def _efektif_bakiye_hesapla(self):
+        """Nakit + Pozisyonlardaki sermaye = Gerçek bakiye"""
+        pozisyondaki_para = sum(
+            poz['miktar'] * (poz['kalan_yuzde'] / 100) 
+            for poz in self.pozisyonlar
+        )
+        return self.bakiye + pozisyondaki_para
+    
     def gunluk_kontrol(self):
+        """Gün değiştiyse sıfırlar; GERÇEKLEŞEN kayıp limiti aştıysa True döner"""
         bugun = datetime.now().date()
         
         if bugun != self.gun_tarihi:
@@ -75,34 +85,37 @@ class PaperTrade:
         return False
     
     def _max_drawdown_kontrol(self):
-        """Peak bakiyeden %15 düşerse yeni işlem açılmaz - BUG FIX: sadece bir kez mesaj"""
-        if self.bakiye < self.peak_bakiye * (1 - config.MAX_DRAWDOWN):
-            # 🆕 Flag kontrolü - sadece bir kez mesaj gönder
+        """Peak bakiyeden %15 düşerse yeni işlem açılmaz - EFECTİF BAKİYE bazlı"""
+        efektif_bakiye = self._efektif_bakiye_hesapla()
+        pozisyondaki_para = efektif_bakiye - self.bakiye
+        
+        if efektif_bakiye < self.peak_bakiye * (1 - config.MAX_DRAWDOWN):
             if not self.drawdown_limit_asildi:
                 self.drawdown_limit_asildi = True
                 if self.telegram:
                     self.telegram(
                         f"⚠️ <b>MAX DRAWDOWN LİMİTİ AŞILDI</b>\n\n"
-                        f"📉 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
-                        f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek\n"
-                        f"💡 Bakiye toparlanana kadar yeni işlem açılmayacak"
+                        f"💰 Nakit: ${self.bakiye:.2f}\n"
+                        f"📊 Pozisyonlarda: ${pozisyondaki_para:.2f}\n"
+                        f"📉 Efektif bakiye: ${efektif_bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
+                        f"🚫 Yeni işlem yok, mevcut pozisyonlar yönetilmeye devam edecek"
                     )
                 self._kaydet()
             return True
         else:
-            # Bakiye toparlandıysa flag'i resetle
             if self.drawdown_limit_asildi:
                 self.drawdown_limit_asildi = False
                 if self.telegram:
                     self.telegram(
                         f"✅ <b>DRAWDOWN TOPARLANDI</b>\n\n"
-                        f"💰 Bakiye: ${self.bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
+                        f"💰 Efektif bakiye: ${efektif_bakiye:.2f} (Peak: ${self.peak_bakiye:.2f})\n"
                         f"🚀 Yeni işlemler tekrar aktif!"
                     )
                 self._kaydet()
             return False
     
     def _adaptive_pozisyon_hesapla(self):
+        """Bakiyeye göre pozisyon büyüklüğü hesapla"""
         adaptive_tutar = min(
             self.bakiye * config.POZISYON_ORANI,
             config.ISLEM_BASINA
@@ -110,6 +123,7 @@ class PaperTrade:
         return max(adaptive_tutar, config.MIN_ISLEM_TUTAR)
     
     def sl_tp_hesapla(self, entry, atr, direction, mrc_mid=None):
+        """RR fix: TP3 artık MRC kanal ortasına dayalı"""
         one_r = atr * config.ATR_CARPI
         max_sl = entry * config.MAX_SL_YUZDE
         sl_mesafe = min(one_r, max_sl)
@@ -283,6 +297,7 @@ class PaperTrade:
                 self._kaydet()
     
     def _slippage_uygula(self, fiyat, direction):
+        """Slippage uygula (gerçekçi fiyat kayması)"""
         if direction == "LONG":
             return fiyat * (1 + config.SLIPPAGE)
         else:
@@ -359,7 +374,12 @@ class PaperTrade:
         long_sayisi = sum(1 for poz in self.pozisyonlar if poz['direction'] == "LONG")
         short_sayisi = sum(1 for poz in self.pozisyonlar if poz['direction'] == "SHORT")
         
-        print(f"💰 Bakiye: ${self.bakiye:.2f}")
+        efektif_bakiye = self._efektif_bakiye_hesapla()
+        pozisyondaki_para = efektif_bakiye - self.bakiye
+        
+        print(f"💰 Nakit bakiye: ${self.bakiye:.2f}")
+        print(f"📊 Pozisyonlarda: ${pozisyondaki_para:.2f}")
+        print(f"💎 Efektif bakiye: ${efektif_bakiye:.2f}")
         print(f"📈 Açık pozisyon: {len(self.pozisyonlar)} (LONG: {long_sayisi}, SHORT: {short_sayisi})")
         print(f"⏳ Cooldown'daki coin: {len(self.cooldown)}")
         print(f"📉 Bugünkü gerçekleşen kayıp: ${gunluk_kayip:.2f} / ${gunluk_limit:.2f} limit")

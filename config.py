@@ -37,9 +37,9 @@ GUNLUK_KAYIP_LIMITI = 0.05  # %5 - günlük bu oranda kayıpta yeni işlem açı
 # Max Drawdown - Peak bakiyeden %15 düşerse her şey durur
 MAX_DRAWDOWN = 0.15         # %15 - tüm zamanların en yüksek bakiyesinden düşüş
 
-# SL/TP (ATR bazlı + %2 cap)
-ATR_CARPI = 1.5             # 1R = ATR * 1.5
-MAX_SL_YUZDE = 0.02         # %2 max (10x güvenliği)
+# SL/TP (ATR bazlı + %3 cap)
+ATR_CARPI = 2.0             # 🆕 1.5 → 2.0 (daha geniş SL)
+MAX_SL_YUZDE = 0.03         # 🆕 %2 → %3 max (daha geniş SL)
 TP1_CARPI = 1.5             # 1.5R
 TP2_CARPI = 3.0             # 3.0R
 TP3_CARPI = 4.5             # 4.5R

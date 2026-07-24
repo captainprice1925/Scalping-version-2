@@ -35,7 +35,6 @@ class PaperTrade:
             print("🆕 Yeni state başlatıldı")
     
     def _kaydet(self):
-        """State'i Gist'e kaydet"""
         state_store.state_kaydet({
             'bakiye': self.bakiye,
             'pozisyonlar': self.pozisyonlar,
@@ -50,7 +49,6 @@ class PaperTrade:
         })
     
     def _efektif_bakiye_hesapla(self):
-        """Nakit + Pozisyonlardaki sermaye = Gerçek bakiye"""
         pozisyondaki_para = sum(
             poz['miktar'] * (poz['kalan_yuzde'] / 100) 
             for poz in self.pozisyonlar
@@ -58,7 +56,6 @@ class PaperTrade:
         return self.bakiye + pozisyondaki_para
     
     def gunluk_kontrol(self):
-        """Gün değiştiyse sıfırlar; GERÇEKLEŞEN kayıp limiti aştıysa True döner"""
         bugun = datetime.now().date()
         
         if bugun != self.gun_tarihi:
@@ -85,7 +82,6 @@ class PaperTrade:
         return False
     
     def _max_drawdown_kontrol(self):
-        """Peak bakiyeden %15 düşerse yeni işlem açılmaz - EFECTİF BAKİYE bazlı"""
         efektif_bakiye = self._efektif_bakiye_hesapla()
         pozisyondaki_para = efektif_bakiye - self.bakiye
         
@@ -115,7 +111,6 @@ class PaperTrade:
             return False
     
     def _adaptive_pozisyon_hesapla(self):
-        """Bakiyeye göre pozisyon büyüklüğü hesapla"""
         adaptive_tutar = min(
             self.bakiye * config.POZISYON_ORANI,
             config.ISLEM_BASINA
@@ -123,7 +118,6 @@ class PaperTrade:
         return max(adaptive_tutar, config.MIN_ISLEM_TUTAR)
     
     def sl_tp_hesapla(self, entry, atr, direction, mrc_mid=None):
-        """RR fix: TP3 artık MRC kanal ortasına dayalı"""
         one_r = atr * config.ATR_CARPI
         max_sl = entry * config.MAX_SL_YUZDE
         sl_mesafe = min(one_r, max_sl)
@@ -265,7 +259,7 @@ class PaperTrade:
                     continue
                 if current_price >= poz['tp1'] and not poz['tp1_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP1_KAPANMA, "TP1")
-                    poz['sl'] = poz['entry'] * (1 + config.KOMISYON)
+                    poz['sl'] = poz['entry'] * (1 + 0.002)  # 🆕 Entry + %0.2 buffer
                     poz['tp1_tetiklendi'] = True
                     pozisyon_degisti = True
                     continue
@@ -285,7 +279,7 @@ class PaperTrade:
                     continue
                 if current_price <= poz['tp1'] and not poz['tp1_tetiklendi']:
                     self.pozisyon_kapat(poz, current_price, config.TP1_KAPANMA, "TP1")
-                    poz['sl'] = poz['entry'] * (1 - config.KOMISYON)
+                    poz['sl'] = poz['entry'] * (1 - 0.002)  # 🆕 Entry - %0.2 buffer
                     poz['tp1_tetiklendi'] = True
                     pozisyon_degisti = True
                     continue
@@ -297,7 +291,6 @@ class PaperTrade:
                 self._kaydet()
     
     def _slippage_uygula(self, fiyat, direction):
-        """Slippage uygula (gerçekçi fiyat kayması)"""
         if direction == "LONG":
             return fiyat * (1 + config.SLIPPAGE)
         else:

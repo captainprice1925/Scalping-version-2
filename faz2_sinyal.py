@@ -119,24 +119,27 @@ def calculate_score(df):
         return max(long_score, short_score), None
 
 
-def sinyal_kontrol(df_15m, df_1h, btc_4h, symbol):
+def sinyal_kontrol(df_15m, df_1h, btc_4h, symbol=None):
     """
     bot.py için uyumlu wrapper fonksiyon
-    Eski arayüzü korur, yeni skor sistemini kullanır
+    Eski arayüzü korur (3 veya 4 argüman)
     """
     # 1H timeframe kullan (daha güvenilir)
     df = df_1h
     
-    if df.empty or len(df) < 200:
-        print(f"⏳ {symbol} yetersiz veri")
+    if df is None or df.empty or len(df) < 200:
+        if symbol:
+            print(f"⏳ {symbol} yetersiz veri")
         return None
     
     # Skor hesapla
     skor, yon = calculate_score(df)
     
+    # Log yazdır
+    coin_adi = symbol if symbol else "bilinmeyen"
     if yon:
-        print(f"✅ {symbol} skoru: {skor}/10 - {yon}")
+        print(f"✅ {coin_adi} skoru: {skor}/10 - {yon}")
         return yon
     else:
-        print(f"⏳ {symbol} skoru: {skor}/10 (yetersiz)")
+        print(f"⏳ {coin_adi} skoru: {skor}/10 (yetersiz)")
         return None

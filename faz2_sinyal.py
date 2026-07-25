@@ -1,98 +1,118 @@
-import numpy as np
-import pandas as pd
-from scipy.signal import argrelextrema
 import config
 
-def find_divergence(df, lookback=10, max_bar_oncesi=30):
+def calculate_score(df):
     """
-    RSI divergence tespiti (2/3 onay - CMF elendi)
-    max_bar_oncesi: Son dip/tepe en fazla bu kadar bar önce oluşmuş olmalı
-    Returns: "LONG", "SHORT", veya None
+    Skor hesapla (0-10 arası)
+    Backtest'te kanıtlanmış sistem
     """
-    if len(df) < lookback * 2:
-        return None
+    row = df.iloc[-1]
     
-    close = df['close'].values
-    rsi = df['rsi'].values
+    # NaN kontrolü
+    if row[['rsi', 'atr', 'stoch_k', 'adx', 'cci']].isna().any():
+        return 0, None
     
-    mask = ~np.isnan(rsi)
-    close = close[mask]
-    rsi = rsi[mask]
+    # LONG SKORU
+    long_score = 0
     
-    if len(close) < lookback * 2:
-        return None
+    # RSI (max 2 puan)
+    if row['rsi'] < 25:
+        long_score += 2
+    elif row['rsi'] < 35:
+        long_score += 1
     
-    dipler = argrelextrema(close, np.less, order=lookback//2)[0]
-    tepeler = argrelextrema(close, np.greater, order=lookback//2)[0]
+    # MRC (max 2 puan)
+    if row['close'] < row['mrc_lower']:
+        long_score += 2
+    elif row['mrc_position'] < 0.2:
+        long_score += 1
     
-    son_bar_index = len(close) - 1
+    # Stochastic (max 2 puan)
+    if row['stoch_k'] < 20 and row['stoch_k'] > row['stoch_d']:
+        long_score += 2
+    elif row['stoch_k'] < 30:
+        long_score += 1
     
-    # BULLISH DIVERGENCE (LONG)
-    if len(dipler) >= 2:
-        onceki, son = dipler[-2], dipler[-1]
-        
-        # Tazelik kontrolü: son dip en fazla max_bar_oncesi önce olmalı
-        bar_farki = son_bar_index - son
-        if bar_farki <= max_bar_oncesi:
-            if close[son] < close[onceki] and rsi[son] > rsi[onceki]:
-                if df['close'].iloc[-1] < df['mrc_l2'].iloc[-1]:
-                    return "LONG"
-        else:
-            print(f"   ⏰ LONG divergence çok eski ({bar_farki} bar önce)")
+    # CCI (max 1 puan)
+    if row['cci'] < -100:
+        long_score += 1
     
-    # BEARISH DIVERGENCE (SHORT)
-    if len(tepeler) >= 2:
-        onceki, son = tepeler[-2], tepeler[-1]
-        
-        # Tazelik kontrolü: son tepe en fazla max_bar_oncesi önce olmalı
-        bar_farki = son_bar_index - son
-        if bar_farki <= max_bar_oncesi:
-            if close[son] > close[onceki] and rsi[son] < rsi[onceki]:
-                if df['close'].iloc[-1] > df['mrc_u2'].iloc[-1]:
-                    return "SHORT"
-        else:
-            print(f"   ⏰ SHORT divergence çok eski ({bar_farki} bar önce)")
+    # MACD (max 1 puan)
+    if row['macd'] > row['macd_signal'] and row['macd_hist'] > 0:
+        long_score += 1
     
-    return None
-
-def btc_dominance_filter(btc_4h_df):
-    """BTC 4H trend filtresi (veto)"""
-    if btc_4h_df.empty or 'mrc_slope_pct' not in btc_4h_df.columns:
-        return "NEUTRAL"
+    # Volume (max 1 puan)
+    if row['volume_ratio'] > 1.5:
+        long_score += 1
     
-    slope = btc_4h_df['mrc_slope_pct'].iloc[-1]
+    # ADX trend gücü (max 1 puan)
+    if row['adx'] > 25 and row['di_diff'] > 0:
+        long_score += 1
     
-    if pd.isna(slope):
-        return "NEUTRAL"
+    # Bollinger (max 1 puan)
+    if row['bb_position'] < 0.1:
+        long_score += 1
     
-    if slope > config.VETO_ESIK:
-        return "LONG_ONLY"
-    elif slope < -config.VETO_ESIK:
-        return "SHORT_ONLY"
+    # Bullish divergence (max 1 puan)
+    if row['bull_div'] == 1:
+        long_score += 1
+    
+    # EMA trend (max 1 puan)
+    if row['ema_9'] > row['ema_21'] > row['ema_50']:
+        long_score += 1
+    
+    # SHORT SKORU
+    short_score = 0
+    
+    # RSI (max 2 puan)
+    if row['rsi'] > 75:
+        short_score += 2
+    elif row['rsi'] > 65:
+        short_score += 1
+    
+    # MRC (max 2 puan)
+    if row['close'] > row['mrc_upper']:
+        short_score += 2
+    elif row['mrc_position'] > 0.8:
+        short_score += 1
+    
+    # Stochastic (max 2 puan)
+    if row['stoch_k'] > 80 and row['stoch_k'] < row['stoch_d']:
+        short_score += 2
+    elif row['stoch_k'] > 70:
+        short_score += 1
+    
+    # CCI (max 1 puan)
+    if row['cci'] > 100:
+        short_score += 1
+    
+    # MACD (max 1 puan)
+    if row['macd'] < row['macd_signal'] and row['macd_hist'] < 0:
+        short_score += 1
+    
+    # Volume (max 1 puan)
+    if row['volume_ratio'] > 1.5:
+        short_score += 1
+    
+    # ADX trend gücü (max 1 puan)
+    if row['adx'] > 25 and row['di_diff'] < 0:
+        short_score += 1
+    
+    # Bollinger (max 1 puan)
+    if row['bb_position'] > 0.9:
+        short_score += 1
+    
+    # Bearish divergence (max 1 puan)
+    if row['bear_div'] == 1:
+        short_score += 1
+    
+    # EMA trend (max 1 puan)
+    if row['ema_9'] < row['ema_21'] < row['ema_50']:
+        short_score += 1
+    
+    # KARAR
+    if long_score >= config.MIN_SKOR and long_score > short_score:
+        return long_score, "LONG"
+    elif short_score >= config.MIN_SKOR and short_score > long_score:
+        return short_score, "SHORT"
     else:
-        return "NEUTRAL"
-
-def sinyal_kontrol(df_15m, df_1h, btc_4h_df):
-    """Tam sinyal kontrolü (2/3 onay + MTF)"""
-    btc_filter = btc_dominance_filter(btc_4h_df)
-    coin_1h_slope = df_1h['mrc_slope_pct'].iloc[-1]
-    sinyal = find_divergence(df_15m)
-    
-    if sinyal is None:
-        return None
-    
-    if sinyal == "LONG":
-        if btc_filter == "SHORT_ONLY":
-            return None
-        if coin_1h_slope < -config.SLOPE_ESIK:
-            return None
-        return "LONG"
-    
-    elif sinyal == "SHORT":
-        if btc_filter == "LONG_ONLY":
-            return None
-        if coin_1h_slope > config.SLOPE_ESIK:
-            return None
-        return "SHORT"
-    
-    return None
+        return max(long_score, short_score), None

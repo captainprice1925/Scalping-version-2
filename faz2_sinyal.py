@@ -1,4 +1,5 @@
 import config
+import pandas as pd
 
 def calculate_score(df):
     """
@@ -116,3 +117,26 @@ def calculate_score(df):
         return short_score, "SHORT"
     else:
         return max(long_score, short_score), None
+
+
+def sinyal_kontrol(df_15m, df_1h, btc_4h, symbol):
+    """
+    bot.py için uyumlu wrapper fonksiyon
+    Eski arayüzü korur, yeni skor sistemini kullanır
+    """
+    # 1H timeframe kullan (daha güvenilir)
+    df = df_1h
+    
+    if df.empty or len(df) < 200:
+        print(f"⏳ {symbol} yetersiz veri")
+        return None
+    
+    # Skor hesapla
+    skor, yon = calculate_score(df)
+    
+    if yon:
+        print(f"✅ {symbol} skoru: {skor}/10 - {yon}")
+        return yon
+    else:
+        print(f"⏳ {symbol} skoru: {skor}/10 (yetersiz)")
+        return None

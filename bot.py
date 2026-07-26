@@ -36,10 +36,8 @@ def main():
     print("🚀 SCALP BOT BAŞLATILIYOR (Paper Trade)")
     print("=" * 60)
     
-    # ÖNCE PaperTrade oluştur (state yüklenecek)
     pt = PaperTrade(telegram_func=send_telegram)
     
-    # SONRA gerçek bakiyeyle başlangıç mesajı gönder
     send_telegram(
         "🚀 <b>SCALP BOT BAŞLATILDI</b>\n\n"
         f"💰 Bakiye: ${pt.bakiye:.2f}\n"
@@ -77,16 +75,17 @@ def main():
                 df_15m = full_analysis(df_15m)
                 df_1h = full_analysis(df_1h)
                 
-                sinyal = sinyal_kontrol(df_15m, df_1h, btc_4h)
+                # 🆕 YENİ: (sinyal, skor) tuple döndürür
+                sinyal, skor = sinyal_kontrol(df_15m, df_1h, btc_4h, symbol)
                 
                 if sinyal:
-                    print(f"✅ {sinyal} sinyali!")
+                    print(f"✅ {sinyal} sinyali (Skor: {skor}/10)!")
                     entry = df_15m['close'].iloc[-1]
                     atr = df_15m['atr'].iloc[-1]
-                    mrc_mid = df_15m['mrc_mid'].iloc[-1]
-                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, mrc_mid)
+                    # 🆕 YENİ: df parametresi eklendi, skor geçiliyor
+                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_15m)
                 else:
-                    print("⏳ Sinyal yok")
+                    print(f"⏳ Sinyal yok (Skor: {skor}/10)")
                 
                 current_price = df_15m['close'].iloc[-1]
                 pt.pozisyon_guncelle(symbol, current_price)

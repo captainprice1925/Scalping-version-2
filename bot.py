@@ -45,12 +45,23 @@ def main():
         f"📈 Açık pozisyon: {len(pt.pozisyonlar)}\n"
         f"⚡ Kaldıraç: {config.KALDIRAC}x\n"
         f"🛡️ Max pozisyon: {config.MAX_POZISYON}\n"
-        f"🎯 Coin sayısı: {len(config.COINS)}"
+        f"🎯 Coin sayısı: {len(config.COINS)}\n"
+        f"📅 Mod: Hafta içi 1h+4h / Hafta sonu 15m"
     )
     
     while True:
         try:
-            print(f"\n🔍 Tarama: {datetime.now().strftime('%H:%M:%S')}")
+            # 🆕 HAFTA İÇİ / HAFTA SONU KONTROLÜ
+            gun = datetime.now().weekday()
+            gun_adi = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"][gun]
+            hafta_sonu = (gun >= 5)
+            
+            if hafta_sonu:
+                mod_adi = "🎉 HAFTA SONU (Scalp 15m)"
+            else:
+                mod_adi = "📅 HAFTA İÇİ (Swing 1h+4h)"
+            
+            print(f"\n🔍 Tarama: {datetime.now().strftime('%H:%M:%S')} - {gun_adi} - {mod_adi}")
             
             print("\n📊 BTC 4H çekiliyor...")
             btc_4h = veri_cek("BTCUSDT", config.TIMEFRAME_VETO, 500)
@@ -62,39 +73,59 @@ def main():
             for symbol in config.COINS:
                 print(f"\n🔎 {symbol}...", end=" ")
                 
-                df_15m = veri_cek(symbol, config.TIMEFRAME_MAIN, 500)
-                if df_15m.empty:
-                    print("❌ Veri yok")
-                    continue
+                if hafta_sonu:
+                    # 🎉 HAFTA SONU: Sadece 15m (scalp)
+                    df_main = veri_cek(symbol, config.TIMEFRAME_MAIN_HAFTA_SONU, 500)
+                    if df_main.empty:
+                        print("❌ Veri yok")
+                        continue
+                    df_mtf = df_main  # MTF olarak aynı veriyi kullan
+                    print(f"(15m)", end=" ")
+                else:
+                    # 📅 HAFTA İÇİ: 1h + 4h birlikte (multi-timeframe)
+                    df_main = veri_cek(symbol, config.TIMEFRAME_MAIN_HAFTA_ICI, 500)
+                    if df_main.empty:
+                        print("❌ 1H veri yok")
+                        continue
+                    
+                    df_mtf = veri_cek(symbol, config.TIMEFRAME_MTF_HAFTA_ICI, 500)
+                    if df_mtf.empty:
+                        print("❌ 4H veri yok")
+                        continue
+                    print(f"(1h+4h)", end=" ")
                 
-                df_1h = veri_cek(symbol, config.TIMEFRAME_MTF, 500)
-                if df_1h.empty:
-                    print("❌ 1H veri yok")
-                    continue
+                # Analiz
+                df_main = full_analysis(df_main)
+                df_mtf = full_analysis(df_mtf)
                 
-                df_15m = full_analysis(df_15m)
-                df_1h = full_analysis(df_1h)
-                
-                # 🆕 YENİ: (sinyal, skor) tuple döndürür
-                sinyal, skor = sinyal_kontrol(df_15m, df_1h, btc_4h, symbol)
+                # Sinyal kontrol (df_main = haftaiçi 1h/haftasonu 15m, df_mtf = haftaiçi 4h/haftasonu 15m)
+                sinyal, skor = sinyal_kontrol(df_main, df_mtf, btc_4h, symbol)
                 
                 if sinyal:
                     print(f"✅ {sinyal} sinyali (Skor: {skor}/10)!")
-                    entry = df_15m['close'].iloc[-1]
-                    atr = df_15m['atr'].iloc[-1]
-                    # 🆕 YENİ: df parametresi eklendi, skor geçiliyor
-                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_15m)
+                    entry = df_main['close'].iloc[-1]
+                    atr = df_main['atr'].iloc[-1]
+                    basarili = pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_main)
                 else:
                     print(f"⏳ Sinyal yok (Skor: {skor}/10)")
                 
-                current_price = df_15m['close'].iloc[-1]
+                # Pozisyon güncelle
+                current_price = df_main['close'].iloc[-1]
                 pt.pozisyon_guncelle(symbol, current_price)
                 
                 time.sleep(1.0)
             
             pt.rapor()
-            print(f"\n💤 {config.TARAMA_ARALIGI} saniye bekleniyor...")
-            time.sleep(config.TARAMA_ARALIGI)
+            
+            # 🆕 TARAMA ARALIĞI (hafta içi/sonu)
+            if hafta_sonu:
+                tarama_araligi = config.TARAMA_ARALIGI_HAFTA_SONU
+                print(f"\n🎉 HAFTA SONU ({gun_adi}): {tarama_araligi} saniye (15 dk) bekleniyor...")
+            else:
+                tarama_araligi = config.TARAMA_ARALIGI_HAFTA_ICI
+                print(f"\n📅 HAFTA İÇİ ({gun_adi}): {tarama_araligi} saniye (1 saat) bekleniyor...")
+            
+            time.sleep(tarama_araligi)
             
         except KeyboardInterrupt:
             print("\n🛑 Bot durduruldu")

@@ -3,3 +3,5 @@ __pycache__/
 .env
 *.log
 .DS_Store
+scalp_bot_state.json
+*.pyc

@@ -80,33 +80,33 @@ class PaperTrade:
             return False
 
     def akilli_sl_tp_hesapla(self, df, direction, atr):
-        """FIXED RR 2.0 - ESKI AKILLI SISTEM SILINDI"""
+        """FATIH V4 - SL 1.5 ATR / BE 0.6 ATR / TP 1.0 ATR"""
         row = df.iloc[-1]
         close = row['close']
         
-        # SABIT: SL 1.0 ATR, TP 2.0 ATR (RR 2.0)
-        sl_atr = config.SL_ATR
-        tp_atr = config.TP_ATR
+        sl_atr = config.SL_ATR  # 1.5
+        tp_atr = config.TP_ATR  # 1.0
+        be_atr = config.BE_ATR  # 0.6
         
         if direction == "LONG":
             sl = close - atr * sl_atr
-            tp1 = close + atr * tp_atr * 0.33
-            tp2 = close + atr * tp_atr * 0.66
-            tp3 = close + atr * tp_atr
+            tp1 = close + atr * be_atr      # 0.6 ATR -> BE'ye çek
+            tp2 = close + atr * tp_atr * 0.7 # 0.7 ATR
+            tp3 = close + atr * tp_atr       # 1.0 ATR final
         else:
             sl = close + atr * sl_atr
-            tp1 = close - atr * tp_atr * 0.33
-            tp2 = close - atr * tp_atr * 0.66
+            tp1 = close - atr * be_atr
+            tp2 = close - atr * tp_atr * 0.7
             tp3 = close - atr * tp_atr
         
         risk = abs(close - sl)
         odul = abs(tp3 - close)
-        rr = odul / risk if risk > 0 else 2.0
+        rr = odul / risk if risk > 0 else 0.66
         
         return {
             'sl': sl, 'tp1': tp1, 'tp2': tp2, 'tp3': tp3,
             'rr': rr, 'sl_mesafe': atr * sl_atr,
-            'analiz': {'sl_atr': f"{sl_atr}", 'tp_atr': f"{tp_atr}"}
+            'analiz': {'sl_atr': f"{sl_atr}", 'tp_atr': f"{tp_atr}", 'be_atr': f"{be_atr}"}
         }
     
     def cooldown_kontrol(self, symbol):
@@ -115,17 +115,29 @@ class PaperTrade:
         del self.cooldown[symbol]
         return False
     
-    def cooldown_ekle(self, symbol, dakika=60):
+    def cooldown_ekle(self, symbol, dakika=90):
         self.cooldown[symbol] = datetime.now() + timedelta(minutes=dakika)
     
     def islem_ac(self, symbol, direction, entry, atr, skor, df=None):
-        if self.gunluk_kontrol(): return False
-        if self._max_drawdown_kontrol(): return False
-        if self.cooldown_kontrol(symbol): return False
+        if self.gunluk_kontrol(): 
+            print(f"⛔ Günlük limit")
+            return False
+        if self._max_drawdown_kontrol(): 
+            print(f"⛔ Max DD")
+            return False
+        if self.cooldown_kontrol(symbol): 
+            print(f"⏳ {symbol} cooldown")
+            return False
         for poz in self.pozisyonlar:
-            if poz['symbol'] == symbol: return False
-        if len(self.pozisyonlar) >= config.MAX_POZISYON: return False
-        if self.bakiye < config.ISLEM_BASINA: return False
+            if poz['symbol'] == symbol: 
+                print(f"⏳ {symbol} zaten açık")
+                return False
+        if len(self.pozisyonlar) >= config.MAX_POZISYON: 
+            print(f"⛔ Max pozisyon {config.MAX_POZISYON}")
+            return False
+        if self.bakiye < config.ISLEM_BASINA: 
+            print(f"⛔ Bakiye yetersiz")
+            return False
         
         levels = self.akilli_sl_tp_hesapla(df, direction, atr)
         
@@ -143,11 +155,12 @@ class PaperTrade:
         if self.telegram:
             self.telegram(
                 f"✅ <b>{symbol} {direction}</b>\n"
-                f"🎯 Skor: {skor}/5\n"
-                f"💰 $10 (sabit) RR:2.0\n"
+                f"🎯 Skor: {skor}/4\n"
+                f"💰 ${config.ISLEM_BASINA} x{config.KALDIRAC}\n"
                 f"📊 Entry: {entry:.4f}\n"
-                f"🛡 SL: {levels['sl']:.4f} (1.0 ATR)\n"
-                f"🎯 TP3: {levels['tp3']:.4f} (2.0 ATR)\n"
+                f"🛡 SL: {levels['sl']:.4f} (1.5 ATR)\n"
+                f"🔒 BE: {levels['tp1']:.4f} (0.6 ATR)\n"
+                f"🎯 TP: {levels['tp3']:.4f} (1.0 ATR)\n"
                 f"📈 RR: {levels['rr']:.2f}"
             )
         self._kaydet()
@@ -165,7 +178,7 @@ class PaperTrade:
                 if current_price >= poz['tp1'] and not poz['tp1_tetiklendi']:
                     poz['sl'] = poz['entry']; poz['tp1_tetiklendi'] = True; self._kaydet(); continue
                 if current_price <= poz['sl']:
-                    sebep = "BREAK-EVEN" if poz['tp1_tetiklendi'] else "STOP"
+                    sebep = "BE" if poz['tp1_tetiklendi'] else "STOP"
                     self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], sebep); continue
             else:
                 if current_price <= poz['tp3']:
@@ -175,7 +188,7 @@ class PaperTrade:
                 if current_price <= poz['tp1'] and not poz['tp1_tetiklendi']:
                     poz['sl'] = poz['entry']; poz['tp1_tetiklendi'] = True; self._kaydet(); continue
                 if current_price >= poz['sl']:
-                    sebep = "BREAK-EVEN" if poz['tp1_tetiklendi'] else "STOP"
+                    sebep = "BE" if poz['tp1_tetiklendi'] else "STOP"
                     self.pozisyon_kapat(poz, current_price, poz['kalan_yuzde'], sebep); continue
     
     def _slippage_uygula(self, fiyat, direction):
@@ -204,7 +217,7 @@ class PaperTrade:
         self._kaydet()
     
     def rapor(self):
-        print("\n" + "="*60 + "\n📊 PAPER TRADE RAPORU\n" + "="*60)
+        print("\n" + "="*60 + "\n📊 PAPER TRADE V4 RAPORU\n" + "="*60)
         toplam = len(self.islem_gecmisi); kaz = sum(1 for i in self.islem_gecmisi if i['pnl'] > 0); pnl = sum(i['pnl'] for i in self.islem_gecmisi)
         efektif = self._efektif_bakiye_hesapla(); dd = (self.peak_bakiye - efektif) / self.peak_bakiye * 100 if self.peak_bakiye > 0 else 0
         print(f"💰 Bakiye: ${self.bakiye:.2f}\n💎 Efektif: ${efektif:.2f}\n📈 Pozisyon: {len(self.pozisyonlar)}\n📉 Drawdown: %{dd:.1f}\n📊 İşlem: {toplam} (W:{kaz} L:{toplam-kaz})")

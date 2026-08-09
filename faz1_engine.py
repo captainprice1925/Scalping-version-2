@@ -44,20 +44,23 @@ def full_analysis(df):
 def get_dinamik_coins(exchange):
     try:
         tickers = exchange.fetch_tickers()
+        blacklist = ["SKHYNIX", "AAPL", "TSLA", "NVDA", "SPX", "TUT", "SNDK", "BICO", "SPCX"]
         adaylar = []
         for sym, t in tickers.items():
             if ":USDT" not in sym: continue
-            if "USDT" not in sym: continue
+            base = sym.split('/')[0]
+            if any(b in base for b in blacklist): continue
+            if len(base) > 7: continue
             qv = t.get('quoteVolume')
-            if not qv or qv < 5000000: continue
+            if not qv or qv < 10000000: continue # 10M$
             bid = t.get('bid'); ask = t.get('ask')
             if bid and ask:
                 spread = (ask-bid)/ask
                 if spread > 0.0008: continue
-            # USDT formatini senin sisteme çevir: BTC/USDT:USDT -> BTCUSDT
-            clean = sym.split('/')[0] + "USDT"
+            clean = base + "USDT"
             adaylar.append((clean, qv))
         adaylar.sort(key=lambda x: x[1], reverse=True)
+        print(f"🔍 Dinamik {len(adaylar)} coin buldu 10M$ üstü")
         return [x[0] for x in adaylar[:15]]
     except Exception as e:
         print(f"⚠️ Dinamik hata: {e}")

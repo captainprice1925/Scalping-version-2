@@ -83,15 +83,15 @@ def get_dinamik_coins(exchange):
             t = clean_map.get(site_coin)
             if not t: continue
             qv = t.get('quoteVolume') or t.get('baseVolume') or 0
-            if qv < 5000000: continue # WEEX için 5M yeterli
+            if qv < 5000000: continue
             bid = t.get('bid'); ask = t.get('ask')
             if bid and ask and (ask-bid)/ask > 0.001: continue
             adaylar.append((site_coin, qv))
 
         adaylar.sort(key=lambda x: x[1], reverse=True)
-        top = [x[0] for x in adaylar[:8]]
+        top = [x[0] for x in adaylar[:12]] # 8'di 12 yaptık
         print(f"🔍 WEEX FİLTRE: {len(adaylar)} coin -> {top}")
-        return top if len(top)>=5 else ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT"]
+        return top if len(top)>=5 else ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
     except Exception as e:
         print(f"⚠️ WEEX hata: {e}")
-        return ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT"]
+        return ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]

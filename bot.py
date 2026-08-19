@@ -30,20 +30,37 @@ def get_taranacak_coinler():
         print(f"⚠️ Dinamik hatası {e}")
         return config.COINS_CORE
 
+def pozisyonlari_takip_et(pt):
+    """Açık pozisyonları 1 dakıklık mumlarla bar-bar SL/TP kontrolü yapar."""
+    for poz in pt.pozisyonlar[:]:
+        symbol = poz['symbol']
+        try:
+            df_1m = veri_cek(symbol, config.POZISYON_TF, 15, sadece_kapali=False)
+            if df_1m.empty:
+                print(f"⚠️ {symbol}: 1m verisi alınamadı, SL/TP bu tur kontrol edilemedi")
+                continue
+            pt.pozisyon_bars_guncelle(symbol, df_1m)
+        except Exception as e:
+            print(f"⚠️ {symbol} pozisyon takip hatası: {e}")
+
 def main():
     print("="*60)
-    print("🚀 FATIH V4 - Dinamik 5M$ + 4H EMA200 + 1H EMA21 + Vol1.3x")
+    print("🚀 FATIH V5 - Kademeli TP + SL 1.5 ATR + 1m pozisyon takibi")
     print("="*60)
     pt = PaperTrade(telegram_func=send_telegram)
-    send_telegram(f"🚀 <b>FATIH V4 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
+    send_telegram(f"🚀 <b>FATIH V5 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
 
     taranacak = get_taranacak_coinler()
     son_guncelleme = datetime.now()
 
     while True:
         try:
+            # Önce açık pozisyonları takip et (her döngüde, 5 dk arayla)
+            if pt.pozisyonlar:
+                pozisyonlari_takip_et(pt)
+
             # Her 6 saatte dinamik listeyi güncelle
-            if (datetime.now() - son_guncelleme).seconds > 21600:
+            if (datetime.now() - son_guncelleme).total_seconds() > 21600:
                 taranacak = get_taranacak_coinler()
                 son_guncelleme = datetime.now()
 
@@ -51,29 +68,34 @@ def main():
             pt.gunluk_kontrol()
 
             for symbol in taranacak:
-                print(f"\n🔎 {symbol}...", end=" ")
-                df_1h = veri_cek(symbol, config.TIMEFRAME_GIRIS, 500)
-                if df_1h.empty: print("❌ 1H yok"); continue
-                df_4h = veri_cek(symbol, config.TIMEFRAME_TREND, 500)
-                if df_4h.empty: print("❌ 4H yok"); continue
+                try:
+                    print(f"\n🔎 {symbol}...", end=" ")
+                    # Sinyal: son (henüz kapanmamış) 1H mumunu at - yarımlanmış mum sinyali bozmasın
+                    df_1h = veri_cek(symbol, config.TIMEFRAME_GIRIS, 500, sadece_kapali=True)
+                    if df_1h.empty: print("❌ 1H yok"); continue
+                    df_4h = veri_cek(symbol, config.TIMEFRAME_TREND, 500, sadece_kapali=True)
+                    if df_4h.empty: print("❌ 4H yok"); continue
 
-                df_1h = full_analysis(df_1h)
-                df_4h = full_analysis(df_4h)
+                    df_1h = full_analysis(df_1h)
+                    df_4h = full_analysis(df_4h)
 
-                sinyal, skor = sinyal_kontrol(None, df_1h, df_4h, symbol, df_4h=df_4h)
+                    sinyal, skor = sinyal_kontrol(None, df_1h, df_4h, symbol, df_4h=df_4h)
 
-                if sinyal:
-                    print(f"✅ {sinyal} {skor}/4")
-                    entry = df_1h['close'].iloc[-1]
-                    atr = df_1h['atr'].iloc[-1]
-                    pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_1h)
-                else:
-                    print(f"⏳ Yok {skor}/4")
+                    if sinyal:
+                        print(f"✅ {sinyal} {skor}/4")
+                        # Giriş canlı fiyattan: son 1m kapanışı
+                        df_canli = veri_cek(symbol, config.POZISYON_TF, 2, sadece_kapali=False)
+                        entry = df_canli['close'].iloc[-1] if not df_canli.empty else df_1h['close'].iloc[-1]
+                        atr = df_1h['atr'].iloc[-1]
+                        pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_1h)
+                    else:
+                        print(f"⏳ Yok {skor}/4")
 
-                # Pozisyon güncelle
-                current = df_1h['close'].iloc[-1]
-                pt.pozisyon_guncelle(symbol, current)
-                time.sleep(0.3)
+                    time.sleep(0.3)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as e:
+                    print(f"❌ {symbol} hata: {e}")
 
             pt.rapor()
             print(f"\n⏳ {config.TARAMA_ARALIGI}sn bekleniyor...")

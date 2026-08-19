@@ -1,9 +1,14 @@
 import pandas as pd
 import numpy as np
 import ccxt
+import config
+
+FALLBACK_COINS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
 
 def get_exchange():
-    return ccxt.weex({'options': {'defaultType': 'swap'}})
+    if not hasattr(ccxt, 'weex'):
+        raise RuntimeError("ccxt.weex yok - requirements.txt'teki ccxt sürümünü güncelleyin (>= 4.5)")
+    return ccxt.weex({'options': {'defaultType': 'swap'}, 'enableRateLimit': True})
 
 def calc_rsi(df, period=14):
     delta = df['close'].diff()
@@ -18,7 +23,8 @@ def calc_atr(df, period=14):
     high_close = (df['high'] - df['close'].shift()).abs()
     low_close = (df['low'] - df['close'].shift()).abs()
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    df['atr'] = tr.ewm(span=period).mean()
+    # Wilder yumuşatması (RSI ile aynı yöntem, standart ATR)
+    df['atr'] = tr.ewm(alpha=1/period, min_periods=period).mean()
     df['atr_pct'] = df['atr'] / df['close'] * 100
     return df
 
@@ -83,15 +89,29 @@ def get_dinamik_coins(exchange):
             t = clean_map.get(site_coin)
             if not t: continue
             qv = t.get('quoteVolume') or t.get('baseVolume') or 0
-            if qv < 5000000: continue
-            bid = t.get('bid'); ask = t.get('ask')
-            if bid and ask and (ask-bid)/ask > 0.001: continue
+            if qv < config.HACIM_MIN_USD: continue
             adaylar.append((site_coin, qv))
 
         adaylar.sort(key=lambda x: x[1], reverse=True)
-        top = [x[0] for x in adaylar[:12]] # 8'di 12 yaptık
-        print(f"🔍 WEEX FİLTRE: {len(adaylar)} coin -> {top}")
-        return top if len(top)>=5 else ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
+
+        # WEEX fetch_tickers bid/ask döndürmez; spread kontrolü en yüksek hacimli
+        # adaylarda emir defteri (order book) ile yapılır
+        onayli = []
+        for site_coin, _ in adaylar[:20]:
+            if len(onayli) >= 12: break
+            try:
+                ob = exchange.fetch_order_book(f"{site_coin[:-4]}/USDT:USDT", 5)
+                if not ob['bids'] or not ob['asks']: continue
+                bid = ob['bids'][0][0]; ask = ob['asks'][0][0]
+                if (ask - bid) / ask > config.SPREAD_MAX:
+                    print(f"⛔ {site_coin} spread yüksek (%{(ask-bid)/ask*100:.3f}) atlandı")
+                    continue
+                onayli.append(site_coin)
+            except Exception:
+                continue
+
+        print(f"🔍 WEEX FİLTRE: {len(adaylar)} aday -> {onayli}")
+        return onayli if len(onayli) >= 5 else FALLBACK_COINS
     except Exception as e:
         print(f"⚠️ WEEX hata: {e}")
-        return ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
+        return FALLBACK_COINS

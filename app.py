@@ -1,8 +1,7 @@
 from flask import Flask, jsonify
-from threading import Thread
+from threading import Lock, Thread
 import traceback
 import sys
-import time
 
 app = Flask(__name__)
 
@@ -12,6 +11,8 @@ bot_status = {
     "error": None,
     "last_log": "Bekleniyor..."
 }
+_bot_thread = None
+_bot_lock = Lock()
 
 def run_bot():
     """Botu arka planda çalıştırır"""
@@ -23,10 +24,23 @@ def run_bot():
         bot_status["started"] = True
         bot.main()
     except Exception as e:
+        bot_status["started"] = False
         bot_status["error"] = str(e)
         bot_status["last_log"] = f"HATA: {e}"
         traceback.print_exc()
         sys.stdout.flush()
+
+
+def start_bot():
+    """Tek süreç içinde bot thread'ini yalnızca bir kez başlatır."""
+    global _bot_thread
+    with _bot_lock:
+        if _bot_thread is not None and _bot_thread.is_alive():
+            return False
+        _bot_thread = Thread(target=run_bot, daemon=True, name="scalping-bot")
+        _bot_thread.start()
+        return True
+
 
 @app.route('/')
 def home():
@@ -45,10 +59,7 @@ def health():
     return "OK"
 
 def run():
-    # Botu ayrı thread'de başlat
-    bot_thread = Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    
+    start_bot()
     print("✅ Flask başlatıldı, port 10000")
     print("🤖 Bot thread'i başlatıldı")
     sys.stdout.flush()

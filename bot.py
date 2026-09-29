@@ -1,7 +1,7 @@
 import os, time, requests
 from datetime import datetime
 import config
-from veri_cekici import veri_cek, get_exchange
+from veri_cekici import fonlama_gecmisi_cek, get_exchange, veri_cek
 from faz1_engine import full_analysis, get_dinamik_coins
 from faz2_sinyal import sinyal_kontrol
 from paper_trade import PaperTrade
@@ -40,6 +40,8 @@ def pozisyonlari_takip_et(pt):
                 print(f"⚠️ {symbol}: 1m verisi alınamadı, SL/TP bu tur kontrol edilemedi")
                 continue
             pt.pozisyon_bars_guncelle(symbol, df_1m)
+            if config.FONLAMA_AKTIF:
+                pt.fonlama_uygula(symbol, fonlama_gecmisi_cek(symbol))
         except Exception as e:
             print(f"⚠️ {symbol} pozisyon takip hatası: {e}")
 

@@ -1,1 +1,6 @@
 __pycache__/
+*.py[cod]
+*.log
+.env
+scalp_bot_state.json
+.DS_Store

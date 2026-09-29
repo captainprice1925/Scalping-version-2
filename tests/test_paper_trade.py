@@ -98,6 +98,62 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertEqual(1, len(trade.pozisyonlar))
         self.assertEqual([], trade.islem_gecmisi)
 
+    def test_forming_bar_is_reprocessed_until_closed(self):
+        trade = self.open_long()
+        base = datetime.now() + timedelta(seconds=5)
+
+        forming = pd.DataFrame(
+            [
+                {
+                    "time": pd.Timestamp(base),
+                    "open": 100.2,
+                    "high": 100.5,
+                    "low": 100.1,
+                    "close": 100.4,
+                    "volume": 1.0,
+                }
+            ]
+        )
+        # İlk tur: mum henüz oluşuyor; hiçbir seviyeye dokunulmadı.
+        trade.pozisyon_bars_guncelle("TESTUSDT", forming)
+        self.assertEqual(1, len(trade.pozisyonlar))
+        self.assertEqual([], trade.islem_gecmisi)
+
+        # Aynı mum kapanmış halde geri gelir: dip SL'in altına inmiş.
+        closed = pd.DataFrame(
+            [
+                {
+                    "time": pd.Timestamp(base),
+                    "open": 100.2,
+                    "high": 100.5,
+                    "low": 98.0,
+                    "close": 98.3,
+                    "volume": 1.0,
+                },
+                {
+                    "time": pd.Timestamp(base + timedelta(minutes=1)),
+                    "open": 98.3,
+                    "high": 99.8,
+                    "low": 99.1,
+                    "close": 99.6,
+                    "volume": 1.0,
+                },
+            ]
+        )
+        trade.pozisyon_bars_guncelle("TESTUSDT", closed)
+
+        self.assertEqual([], trade.pozisyonlar)
+        self.assertEqual("STOP", trade.islem_gecmisi[-1]["sebep"])
+        self.assertAlmostEqual(
+            trade.islem_gecmisi[-1]["exit"],
+            98.5 * (1 - config.CIKIS_SLIPPAGE_ORANI),
+            places=8,
+        )
+
+        # Aynı mumun yeniden gönderilmesi çift işlem üretmez.
+        trade.pozisyon_bars_guncelle("TESTUSDT", closed)
+        self.assertEqual(1, len(trade.islem_gecmisi))
+
     def test_funding_is_applied_once_and_positive_rate_costs_long(self):
         trade = self.open_long()
         position = trade.pozisyonlar[0]

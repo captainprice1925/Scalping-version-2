@@ -452,7 +452,8 @@ class PaperTrade:
         return True
 
     def pozisyon_bars_guncelle(self, symbol, bars):
-        """Sadece pozisyon açıldıktan sonraki ve daha önce işlenmemiş mumları işler."""
+        """Kapanmış mumları bir kez, en güncel (oluşmakta olan) mumu ise kapanana
+        kadar her turda yeniden işler; mum içi SL/TP dokunuşları kaçmaz."""
         pozisyon = next(
             (item for item in self.pozisyonlar if item["symbol"] == symbol), None
         )
@@ -464,7 +465,9 @@ class PaperTrade:
         son_islenen_dt = (
             datetime.fromisoformat(son_islenen) if son_islenen is not None else None
         )
-        for _, row in bars.iterrows():
+        rows = list(bars.iterrows())
+        son_satir = len(rows) - 1
+        for index, (_, row) in enumerate(rows):
             bar_dt = row["time"]
             if hasattr(bar_dt, "to_pydatetime"):
                 bar_dt = bar_dt.to_pydatetime()
@@ -484,8 +487,11 @@ class PaperTrade:
             )
             if pozisyon not in self.pozisyonlar:
                 break
-            pozisyon["son_islenen_bar"] = bar_dt.isoformat()
-            son_islenen_dt = bar_dt
+            if index < son_satir:
+                pozisyon["son_islenen_bar"] = bar_dt.isoformat()
+                son_islenen_dt = bar_dt
+            # Son satır hâlâ oluşmakta olan mumdur; "işlendi" işaretlenmez ki
+            # sonraki turda kapanmış haliyle yeniden değerlendirilebilsin.
         self._kaydet()
 
     def _tp1_isle(self, pozisyon):

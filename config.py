@@ -10,12 +10,12 @@ POZISYON_TF = "1m"
 
 # Paper hesap ve risk sınırları. Gerçek emir gönderen bir borsa adaptörü yoktur.
 BUTCE_SANAL = 100
-KALDIRAC = 20                         # İzole 20×; tahmini likidasyon girişe ~%5 mesafede
+KALDIRAC = 10                         # İzole 10×; tahmini likidasyon girişe ~%10 mesafede
 RISK_YUZDE_ISLEM = 0.01              # Kullanıcı tercihi: işlem başına sermayenin %1'i
 MAX_TOPLAM_RISK_YUZDE = 0.02         # Aynı anda açık tüm işlemlerde en fazla %2 tahmini risk
-# Marjin sınırları 20× kaldıraçta notional aralığını (~25–100 USDT) koruyacak şekilde ölçeklendi.
-MIN_ISLEM_MARJINI = 1.25
-MAX_ISLEM_MARJINI = 5
+# Marjin sınırları 10× kaldıraçta notional aralığını (~25–100 USDT) koruyacak şekilde ölçeklendi.
+MIN_ISLEM_MARJINI = 2.5
+MAX_ISLEM_MARJINI = 10
 MAX_TOPLAM_MARJIN_YUZDE = 0.30        # Açık marjin toplamı sermayenin %30'unu geçmez
 MAX_POZISYON = 2
 MAX_AYNI_YON = 2
@@ -55,4 +55,4 @@ TARAMA_ARALIGI = 300
 COOLDOWN_DAKIKA = 90
 COOLDOWN_BE_DAKIKA = 45
 
-print("✅ Config V6 - %1 risk tabanlı boyutlandırma + 20× izole kaldıraç + taker maliyeti varsayımı")
+print("✅ Config V6 - %1 risk tabanlı boyutlandırma + 10× izole kaldıraç + taker maliyeti varsayımı")

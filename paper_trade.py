@@ -274,7 +274,7 @@ class PaperTrade:
         }
 
     def _tahmini_likidasyon_fiyati(self, giris_fiyati, direction):
-        """Bakım marjini hariç, izole 20× pozisyon için ihtiyatlı yaklaşık tasfiye seviyesi.
+        """Bakım marjini hariç, izole 10× pozisyon için ihtiyatlı yaklaşık tasfiye seviyesi.
 
         Bu değer borsa tasfiye fiyatı değildir; gerçek emir uygulamasında borsa API'sinden alınmalıdır.
         """

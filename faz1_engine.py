@@ -1,14 +1,8 @@
 import pandas as pd
 import numpy as np
-import ccxt
 import config
 
 FALLBACK_COINS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
-
-def get_exchange():
-    if not hasattr(ccxt, 'weex'):
-        raise RuntimeError("ccxt.weex yok - requirements.txt'teki ccxt sürümünü güncelleyin (>= 4.5)")
-    return ccxt.weex({'options': {'defaultType': 'swap'}, 'enableRateLimit': True})
 
 def calc_rsi(df, period=14):
     delta = df['close'].diff()
@@ -94,8 +88,8 @@ def get_dinamik_coins(exchange):
 
         adaylar.sort(key=lambda x: x[1], reverse=True)
 
-        # WEEX fetch_tickers bid/ask döndürmez; spread kontrolü en yüksek hacimli
-        # adaylarda emir defteri (order book) ile yapılır
+        # fetch_tickers her borsada bid/ask döndürmez; spread kontrolü en yüksek
+        # hacimli adaylarda emir defteri (order book) ile yapılır
         onayli = []
         for site_coin, _ in adaylar[:20]:
             if len(onayli) >= 12: break
@@ -110,8 +104,8 @@ def get_dinamik_coins(exchange):
             except Exception:
                 continue
 
-        print(f"🔍 WEEX FİLTRE: {len(adaylar)} aday -> {onayli}")
+        print(f"🔍 BORSA FİLTRE: {len(adaylar)} aday -> {onayli}")
         return onayli if len(onayli) >= 5 else FALLBACK_COINS
     except Exception as e:
-        print(f"⚠️ WEEX hata: {e}")
+        print(f"⚠️ Coin filtresi hatası: {e}")
         return FALLBACK_COINS

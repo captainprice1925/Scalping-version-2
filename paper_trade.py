@@ -637,8 +637,10 @@ class PaperTrade:
 
     def rapor(self):
         print("\n" + "=" * 60 + "\n📊 PAPER TRADE V6 RAPORU\n" + "=" * 60)
-        toplam = len(self.islem_gecmisi)
-        kazanan = sum(1 for islem in self.islem_gecmisi if islem["pnl"] > 0)
+        islemler = [i for i in self.islem_gecmisi if i["sebep"] != "FONLAMA"]
+        fonlama_pnl = sum(i["pnl"] for i in self.islem_gecmisi if i["sebep"] == "FONLAMA")
+        toplam = len(islemler)
+        kazanan = sum(1 for islem in islemler if islem["pnl"] > 0)
         pnl = sum(islem["pnl"] for islem in self.islem_gecmisi)
         efektif = self._efektif_bakiye_hesapla()
         drawdown = (
@@ -656,4 +658,4 @@ class PaperTrade:
         )
         if toplam > 0:
             print(f"🎯 Win rate: %{kazanan / toplam * 100:.1f}")
-        print(f"💵 Net PnL: ${pnl:+.2f}\n" + "=" * 60)
+        print(f"💵 Net PnL: ${pnl:+.2f} (fonlama: ${fonlama_pnl:+.2f})\n" + "=" * 60)

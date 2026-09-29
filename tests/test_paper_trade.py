@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -194,6 +195,84 @@ class PaperTradeRiskTests(unittest.TestCase):
         telegram_komut.hata_ekle("test-kaynak", "bir hata")
         metin = telegram_komut.hata_mesaji()
         self.assertIn("test-kaynak", metin)
+
+    def test_liquidation_safety_filter(self):
+        trade = PaperTrade()
+        with patch.object(config, "KALDIRAC", 50):
+            guvenli, likidasyon = trade._stop_likidasyon_guvenli_mi(
+                {"sl": 98.4}, 100.0, "LONG"
+            )
+            self.assertFalse(guvenli)
+            self.assertAlmostEqual(likidasyon, 98.0, places=8)
+            guvenli2, _ = trade._stop_likidasyon_guvenli_mi(
+                {"sl": 98.6}, 100.0, "LONG"
+            )
+            self.assertTrue(guvenli2)
+
+    def test_old_state_migration_fills_v6_fields(self):
+        old_state = {
+            "bakiye": 95.0,
+            "pozisyonlar": [
+                {
+                    "symbol": "OLDUSDT",
+                    "direction": "LONG",
+                    "entry": 1.0,
+                    "atr": 0.01,
+                    "sl": 0.985,
+                    "tp1": 1.012,
+                    "tp2": 1.0189,
+                    "tp3": 1.027,
+                    "rr": 1.8,
+                    "skor": 3,
+                    "miktar": 10,
+                    "acilis_zamani": "2026-09-29T20:00:00",
+                    "tp1_tetiklendi": False,
+                    "tp2_tetiklendi": False,
+                    "kalan_yuzde": 100,
+                    "son_islenen_bar": None,
+                }
+            ],
+            "islem_gecmisi": [],
+            "cooldown": {},
+            "gun_baslangic_bakiye": 100,
+            "gun_tarihi": "2026-09-29",
+            "gunluk_limit_asildi": False,
+            "gunluk_gerceklesen_pnl": 0,
+            "peak_bakiye": 100,
+            "drawdown_limit_asildi": False,
+        }
+        with open("scalp_bot_state.json", "w", encoding="utf-8") as file:
+            json.dump(old_state, file)
+
+        trade = PaperTrade()
+        pozisyon = trade.pozisyonlar[0]
+        self.assertEqual(pozisyon["notional"], 10 * config.KALDIRAC)
+        self.assertEqual(pozisyon["giris_fiyat"], 1.0)
+        self.assertEqual(pozisyon["giris_komisyonu"], 0.0)
+        self.assertEqual(pozisyon["son_fiyat"], 1.0)
+        self.assertIsNone(pozisyon["tahmini_likidasyon"])
+        self.assertIsNone(pozisyon["son_fonlama_zamani"])
+
+    def test_partial_tp_then_breakeven_stop(self):
+        trade = self.open_long()
+        trade.pozisyon_guncelle("TESTUSDT", 100.2, 101.3, 100.1, 101.2)
+        self.assertEqual(60, trade.pozisyonlar[0]["kalan_yuzde"])
+        self.assertEqual(100.0, trade.pozisyonlar[0]["sl"])
+
+        trade.pozisyon_guncelle("TESTUSDT", 101.0, 101.0, 99.9, 99.95)
+        self.assertEqual([], trade.pozisyonlar)
+        self.assertEqual(["TP1", "BE"], [x["sebep"] for x in trade.islem_gecmisi])
+
+    def test_drawdown_limit_blocks_and_resets(self):
+        trade = PaperTrade()
+        trade.peak_bakiye = 100.0
+        trade.bakiye = 79.0
+        self.assertTrue(trade._max_drawdown_kontrol())
+        self.assertTrue(trade.drawdown_limit_asildi)
+
+        trade.bakiye = 90.0
+        self.assertFalse(trade._max_drawdown_kontrol())
+        self.assertFalse(trade.drawdown_limit_asildi)
 
     def test_wsgi_starts_the_single_bot_thread_entrypoint(self):
         sys.modules.pop("wsgi", None)

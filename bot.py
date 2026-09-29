@@ -50,11 +50,11 @@ def pozisyonlari_takip_et(pt):
 
 def main():
     print("="*60)
-    print("🚀 FATIH V5 - Kademeli TP + SL 1.5 ATR + 1m pozisyon takibi")
+    print("🚀 FATIH V6 - Risk tabanlı boyutlandırma + kademeli TP + 1m pozisyon takibi")
     print("="*60)
     pt = PaperTrade(telegram_func=send_telegram)
     telegram_komut.komut_dinleyici_baslat(pt, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-    send_telegram(f"🚀 <b>FATIH V5 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
+    send_telegram(f"🚀 <b>FATIH V6 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
 
     taranacak = get_taranacak_coinler()
     son_guncelleme = datetime.now()

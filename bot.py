@@ -1,6 +1,7 @@
 import os, time, requests
 from datetime import datetime
 import config
+import telegram_komut
 from veri_cekici import fonlama_gecmisi_cek, get_exchange, veri_cek
 from faz1_engine import full_analysis, get_dinamik_coins
 from faz2_sinyal import sinyal_kontrol
@@ -28,6 +29,7 @@ def get_taranacak_coinler():
         return coins
     except Exception as e:
         print(f"⚠️ Dinamik hatası {e}")
+        telegram_komut.hata_ekle("dinamik coin listesi", e)
         return config.COINS_CORE
 
 def pozisyonlari_takip_et(pt):
@@ -44,12 +46,14 @@ def pozisyonlari_takip_et(pt):
                 pt.fonlama_uygula(symbol, fonlama_gecmisi_cek(symbol))
         except Exception as e:
             print(f"⚠️ {symbol} pozisyon takip hatası: {e}")
+            telegram_komut.hata_ekle(f"{symbol} pozisyon takibi", e)
 
 def main():
     print("="*60)
     print("🚀 FATIH V5 - Kademeli TP + SL 1.5 ATR + 1m pozisyon takibi")
     print("="*60)
     pt = PaperTrade(telegram_func=send_telegram)
+    telegram_komut.komut_dinleyici_baslat(pt, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     send_telegram(f"🚀 <b>FATIH V5 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
 
     taranacak = get_taranacak_coinler()
@@ -98,15 +102,17 @@ def main():
                     raise
                 except Exception as e:
                     print(f"❌ {symbol} hata: {e}")
+                    telegram_komut.hata_ekle(f"{symbol} tarama", e)
 
             pt.rapor()
+            telegram_komut.son_tarama_guncelle(len(taranacak))
             print(f"\n⏳ {config.TARAMA_ARALIGI}sn bekleniyor...")
             time.sleep(config.TARAMA_ARALIGI)
 
         except KeyboardInterrupt:
             print("🛑 Durduruldu"); break
         except Exception as e:
-            print(f"❌ Hata: {e}"); time.sleep(60)
+            print(f"❌ Hata: {e}"); telegram_komut.hata_ekle("ana döngü", e); time.sleep(60)
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,8 @@
 import ccxt
 import pandas as pd
 
+import telegram_komut
+
 # ccxt >= 4.4'te 'gateio' sınıfı 'gate' olarak yeniden adlandırıldı.
 _gate_cls = getattr(ccxt, "gate", None) or getattr(ccxt, "gateio")
 gateio = _gate_cls(
@@ -43,6 +45,7 @@ def veri_cek(symbol, interval, limit=500, sadece_kapali=False):
         return df
     except (ccxt.BaseError, ValueError) as error:
         print(f"❌ {symbol} {interval} veri hatası: {error}")
+        telegram_komut.hata_ekle(f"{symbol} {interval} veri", error)
         return pd.DataFrame()
 
 
@@ -66,4 +69,5 @@ def fonlama_gecmisi_cek(symbol, limit=100):
         ]
     except (ccxt.BaseError, ValueError) as error:
         print(f"⚠️ {symbol} fonlama verisi alınamadı: {error}")
+        telegram_komut.hata_ekle(f"{symbol} fonlama", error)
         return []

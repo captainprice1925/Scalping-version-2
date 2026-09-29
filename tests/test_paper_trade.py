@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 import config
+import telegram_komut
 from paper_trade import PaperTrade
 
 
@@ -174,6 +175,25 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertAlmostEqual(first_cash - opening_cash, expected_funding, places=8)
         self.assertAlmostEqual(trade.bakiye, first_cash, places=8)
         self.assertEqual(1, len([x for x in trade.islem_gecmisi if x["sebep"] == "FONLAMA"]))
+
+    def test_telegram_summary_includes_open_position(self):
+        trade = self.open_long()
+        metin = telegram_komut.ozet_mesaji(trade)
+
+        self.assertIn("TESTUSDT", metin)
+        self.assertIn("SL 98.5", metin)
+        self.assertIn("Nakit", metin)
+
+    def test_telegram_unknown_command(self):
+        self.assertIsNone(telegram_komut.komut_isle("merhaba", None))
+        cevap = telegram_komut.komut_isle("/bilinmeyen", None)
+        self.assertIn("/yardim", cevap)
+
+    def test_telegram_error_log_records(self):
+        telegram_komut._hata_gecmisi.clear()
+        telegram_komut.hata_ekle("test-kaynak", "bir hata")
+        metin = telegram_komut.hata_mesaji()
+        self.assertIn("test-kaynak", metin)
 
     def test_wsgi_starts_the_single_bot_thread_entrypoint(self):
         sys.modules.pop("wsgi", None)

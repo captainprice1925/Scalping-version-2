@@ -5,6 +5,7 @@ diğer sohbetler yok sayılır. Bu modül borsaya emir göndermez ve hesap durum
 değiştirmez; yalnızca paper-trade durumunu raporlar.
 """
 
+import os
 import time
 from collections import deque
 from datetime import datetime
@@ -18,6 +19,8 @@ YARDIM_METNI = (
     "ℹ️ <b>Komutlar</b>\n"
     "/durum — açık pozisyonlar + hesap özeti\n"
     "/pozisyonlar — yalnızca pozisyonlar\n"
+    "/istatistik — işlem bazlı WR, beklenti, çıkış nedenleri\n"
+    "/state — scalp_bot_state.json dosyasını Telegram'a gönderir (ücretsiz yedek)\n"
     "/hata — son hatalar ve sistem durumu\n"
     "/yardim — bu mesaj"
 )
@@ -125,6 +128,34 @@ def hata_mesaji():
     return "\n".join(satirlar)
 
 
+def state_gonder(token, chat_id):
+    """scalp_bot_state.json dosyasını Telegram'a belge olarak gönderir.
+
+    Ücretsiz Render planında shell erişimi olmadığı için tek tıkla yedek/analiz
+    yolu budur. Dosya paper-trade durumudur; gerçek anahtar/secret içermez.
+    """
+    import state_store
+
+    dosya = state_store.DOSYA
+    if not os.path.exists(dosya):
+        return "⚠️ State dosyası bulunamadı (bot hiç kayıt almamış olabilir)."
+    try:
+        boyut_kb = os.path.getsize(dosya) / 1024
+        with open(dosya, "rb") as file:
+            cevap = requests.post(
+                f"https://api.telegram.org/bot{token}/sendDocument",
+                data={"chat_id": str(chat_id)},
+                files={"document": (dosya, file, "application/json")},
+                timeout=60,
+            )
+        if cevap.ok:
+            return f"📤 State gönderildi ({boyut_kb:.1f} KB)."
+        return f"⚠️ State gönderilemedi: HTTP {cevap.status_code}"
+    except Exception as error:
+        hata_ekle("state gönderimi", error)
+        return "⚠️ State gönderilirken hata oluştu; /hata ile bakabilirsin."
+
+
 def komut_isle(metin, pt):
     """Gelen metni komuta çevirir; bilinmeyen/ilgisiz mesajlarda None döner."""
     metin = (metin or "").strip().lower()
@@ -137,6 +168,10 @@ def komut_isle(metin, pt):
         return ozet_mesaji(pt, sadece_pozisyon=True)
     if komut in ("/hata", "/hatalar", "/saglik"):
         return hata_mesaji()
+    if komut in ("/istatistik", "/istat", "/stats"):
+        return f"<b>{pt.istatistik()}</b>"
+    if komut in ("/state", "/dosya", "/yedek"):
+        return "__STATE_GONDER__"
     if komut in ("/yardim", "/help", "/start"):
         return YARDIM_METNI
     return "🤔 Bilinmeyen komut. /yardim yazabilirsin."
@@ -187,7 +222,25 @@ def _dinleme_dongusu(pt, token, chat_id):
                     komut_cevabi = (
                         "⚠️ Komut işlenirken hata oluştu; /hata ile son kayıtlara bakabilirsin."
                     )
-                if komut_cevabi:
+                if komut_cevabi == "__STATE_GONDER__":
+                    try:
+                        mesaj_metni = state_gonder(token, chat_id)
+                    except Exception as inner:
+                        hata_ekle("state gönderimi", inner)
+                        mesaj_metni = "⚠️ State gönderilirken hata oluştu."
+                    try:
+                        requests.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            json={
+                                "chat_id": chat_id,
+                                "text": mesaj_metni,
+                                "parse_mode": "HTML",
+                            },
+                            timeout=15,
+                        )
+                    except Exception as inner:
+                        hata_ekle("telegram gönderim", inner)
+                elif komut_cevabi:
                     try:
                         requests.post(
                             f"https://api.telegram.org/bot{token}/sendMessage",

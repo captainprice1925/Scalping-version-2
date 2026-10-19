@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from uuid import uuid4
 
 import config
 import state_store
@@ -165,6 +166,7 @@ class PaperTrade:
             self.gunluk_gerceklesen_pnl += fonlama_pnl
             self.islem_gecmisi.append(
                 {
+                    "poz_id": pozisyon.get("id"),
                     "symbol": pozisyon["symbol"],
                     "direction": pozisyon["direction"],
                     "entry": pozisyon["giris_fiyat"],
@@ -407,6 +409,7 @@ class PaperTrade:
             return False
 
         pozisyon = {
+            "id": uuid4().hex,
             "symbol": symbol,
             "direction": direction,
             "entry": entry,
@@ -499,7 +502,9 @@ class PaperTrade:
             return
         self.pozisyon_kapat(pozisyon, pozisyon["tp1"], config.TP1_YUZDE, "TP1")
         if pozisyon in self.pozisyonlar:
-            pozisyon["sl"] = pozisyon["entry"]
+            # V6.1: BE, sinyal fiyatına değil gerçek doluş fiyatına (slippage dahil)
+            # çekilir; TP1 sonrası BE çıkışı artık gerçekten başa baş.
+            pozisyon["sl"] = pozisyon.get("giris_fiyat", pozisyon["entry"])
             pozisyon["tp1_tetiklendi"] = True
 
     def _tp2_isle(self, pozisyon):
@@ -598,6 +603,7 @@ class PaperTrade:
         self.gunluk_gerceklesen_pnl += net_pnl
         self.islem_gecmisi.append(
             {
+                "poz_id": pozisyon.get("id"),
                 "symbol": pozisyon["symbol"],
                 "direction": pozisyon["direction"],
                 "entry": pozisyon["giris_fiyat"],
@@ -635,6 +641,79 @@ class PaperTrade:
         self.peak_bakiye = max(self.peak_bakiye, self._efektif_bakiye_hesapla())
         self._kaydet()
 
+    def istatistik(self):
+        """İşlem seviyesinde istatistik üretir.
+
+        V6.1: Kısmi TP çıkışları (TP1/TP2/TP3/BE) aynı pozisyonun parçalarıdır;
+        eski rapor her parçayı ayrı "işlem" saydığı için win rate şişiyordu.
+        Burada kayıtlar poz_id ile tek işleme toplanır (eski kayıtlarda symbol+entry).
+        """
+        islemler = [i for i in self.islem_gecmisi if i["sebep"] != "FONLAMA"]
+        fonlama = sum(i["pnl"] for i in self.islem_gecmisi if i["sebep"] == "FONLAMA")
+        if not islemler:
+            return "📭 Henüz kapanmış işlem yok."
+
+        gruplar = {}
+        for islem in islemler:
+            anahtar = islem.get("poz_id") or (islem["symbol"], islem["entry"])
+            gruplar.setdefault(anahtar, []).append(islem)
+
+        satirlar = [f"🧮 İSTATİSTİK — {len(gruplar)} işlem, {len(islemler)} çıkış olayı"]
+        for anahtar, kayitlar in gruplar.items():
+            sonuclar = {
+                "symbol": kayitlar[0]["symbol"],
+                "direction": kayitlar[0]["direction"],
+                "skor": kayitlar[0].get("skor", 0),
+                "pnl": sum(k["pnl"] for k in kayitlar),
+                "komisyon": sum(k["komisyon"] for k in kayitlar),
+                "sebepler": [k["sebep"] for k in kayitlar],
+            }
+            gruplar[anahtar] = sonuclar
+
+        trades = list(gruplar.values())
+        kazanclar = [t["pnl"] for t in trades if t["pnl"] > 0]
+        kayiplar = [t["pnl"] for t in trades if t["pnl"] <= 0]
+        kazanan = len(kazanclar)
+        toplam = len(trades)
+        wr = kazanan / toplam * 100 if toplam else 0
+        ort_kazanc = sum(kazanclar) / len(kazanclar) if kazanclar else 0.0
+        ort_kayip = sum(kayiplar) / len(kayiplar) if kayiplar else 0.0
+        oran = abs(ort_kazanc / ort_kayip) if ort_kayip < 0 else float("inf")
+        net = sum(t["pnl"] for t in trades)
+        ev = net / toplam if toplam else 0.0
+        komisyon = sum(t["komisyon"] for t in trades)
+        min_wr = 100 / (1 + oran) if oran != float("inf") else 0.0
+
+        satirlar.append(
+            f"🎯 İşlem bazlı WR: %{wr:.1f} (W:{kazanan} L:{len(kayiplar)})\n"
+            f"💵 Ort. kazanç: ${ort_kazanc:+.3f} | Ort. kayıp: ${ort_kayip:+.3f} | Oran: {oran:.2f}x\n"
+            f"📉 Break-even WR: %{min_wr:.1f} (kâr için WR bunun üstünde olmalı)\n"
+            f"🎲 Beklenti/işlem: ${ev:+.3f} | Net PnL: ${net:+.2f} (fonlama: ${fonlama:+.2f})\n"
+            f"💳 Toplam komisyon: ${komisyon:.2f}"
+        )
+
+        sebep_pnl = {}
+        sebep_adet = {}
+        for islem in islemler:
+            sebep_pnl[islem["sebep"]] = sebep_pnl.get(islem["sebep"], 0.0) + islem["pnl"]
+            sebep_adet[islem["sebep"]] = sebep_adet.get(islem["sebep"], 0) + 1
+        sebep_satirlari = [
+            f"  {sebep}: {sebep_adet[sebep]}x ${sebep_pnl[sebep]:+.2f}"
+            for sebep in sorted(sebep_pnl, key=lambda s: sebep_pnl[s])
+        ]
+        satirlar.append("🔎 Çıkış nedenleri:\n" + "\n".join(sebep_satirlari))
+
+        sembol_pnl = {}
+        for t in trades:
+            sembol_pnl[t["symbol"]] = sembol_pnl.get(t["symbol"], 0.0) + t["pnl"]
+        en_kotu = sorted(sembol_pnl.items(), key=lambda x: x[1])[:3]
+        if en_kotu and en_kotu[0][1] < 0:
+            satirlar.append(
+                "📍 En çok kaybettirenler: "
+                + ", ".join(f"{s} ${p:+.2f}" for s, p in en_kotu)
+            )
+        return "\n".join(satirlar)
+
     def rapor(self):
         print("\n" + "=" * 60 + "\n📊 PAPER TRADE V6 RAPORU\n" + "=" * 60)
         islemler = [i for i in self.islem_gecmisi if i["sebep"] != "FONLAMA"]
@@ -654,8 +733,10 @@ class PaperTrade:
             f"📈 Pozisyon: {len(self.pozisyonlar)}\n"
             f"⚠️ Açık stop riski: ${self._toplam_acik_risk():.2f}\n"
             f"📉 Drawdown: %{drawdown:.1f}\n"
-            f"📊 İşlem: {toplam} (W:{kazanan} L:{toplam - kazanan})"
+            f"📊 Çıkış olayı: {toplam} (W:{kazanan} L:{toplam - kazanan}) — kısmi TP parçaları dahil, yanıltıcı olabilir"
         )
         if toplam > 0:
-            print(f"🎯 Win rate: %{kazanan / toplam * 100:.1f}")
-        print(f"💵 Net PnL: ${pnl:+.2f} (fonlama: ${fonlama_pnl:+.2f})\n" + "=" * 60)
+            print(f"🎯 Win rate (olay bazlı): %{kazanan / toplam * 100:.1f}")
+        print(f"💵 Net PnL: ${pnl:+.2f} (fonlama: ${fonlama_pnl:+.2f})")
+        print(self.istatistik())
+        print("=" * 60)

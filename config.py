@@ -18,7 +18,9 @@ MIN_ISLEM_MARJINI = 2.5
 MAX_ISLEM_MARJINI = 10
 MAX_TOPLAM_MARJIN_YUZDE = 0.30        # Açık marjin toplamı sermayenin %30'unu geçmez
 MAX_POZISYON = 2
-MAX_AYNI_YON = 2
+# V6.1: Aynı yönde ikinci pozisyon yasak — logda tüm sinyaller aynı anda SHORT
+# geliyordu; iki korele pozisyon tek harekette çift stop yiyor.
+MAX_AYNI_YON = 1
 LIKIDASYON_TAMPON_YUZDE = 0.005       # Tahmini likidasyon ile stop arasında en az %0,5 tampon
 
 GUNLUK_KAYIP_LIMITI = 0.03
@@ -33,7 +35,13 @@ RSI_SHORT_MIN = 35
 RSI_SHORT_MAX = 60
 VOLUME_MA = 20
 VOLUME_MULT = 1.3
-MIN_SKOR = 3
+# V6.1: Hacim onayı zorunlu (MIN_SKOR 4). Log analizi: 3/4 skorlu, Vol < 1.3x
+# olan "ucuz" sinyaller negatif EV'nin ana kaynağıydı.
+MIN_SKOR = 4
+
+# V6.1: BTC 4h rejimi, BTC dışı coinlerin yönünü filtreler. Tüm piyasa aynı
+# anda tek yöne sinyal verdiğinde korele kayıp riski düşer.
+BTC_REGIME_FILTRE = True
 
 # SL 1.5 ATR, TP 2.7 ATR, TP1 1.2 ATR
 SL_ATR = 1.5
@@ -52,7 +60,9 @@ CIKIS_SLIPPAGE_ORANI = 0.0003
 FONLAMA_AKTIF = True
 
 TARAMA_ARALIGI = 300
-COOLDOWN_DAKIKA = 90
+# V6.1: STOP sonrası 90dk çok kısaydı — 1h sinyal hâlâ geçerliyken tekrar
+# girip aynı chop'ta ikinci stop yeme döngüsü vardı.
+COOLDOWN_DAKIKA = 240
 COOLDOWN_BE_DAKIKA = 45
 
-print("✅ Config V6 - %1 risk tabanlı boyutlandırma + 10× izole kaldıraç + taker maliyeti varsayımı")
+print("✅ Config V6.1 - %1 risk tabanlı boyutlandırma + hacim onaylı sinyal (4/4) + BTC rejim filtresi")

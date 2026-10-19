@@ -36,6 +36,23 @@ Motor, 10× izole kaldıraç için bakım marjinini hariç tutan yaklaşık bir 
 
 Geniş bir mum TP3'e ulaşırsa V6 önce TP1'de %40, ardından TP2'de %30 ve kalan %30'u TP3'te işler. Aynı mumda hem stop hem hedef görülürse stop önceliği korunur. Ayrıca açılış zamanından önce oluşmuş 1 dakikalık mumlar yeni pozisyona uygulanmaz. Oluşmakta olan (henüz kapanmamış) son mum ise kapanana kadar her tarama turunda yeniden değerlendirilir; böylece mum içinde oluşan SL/TP dokunuşları kaçırılmaz.
 
+## V6.1 — PnL düzeltme paketi (18.10.2026)
+
+Log analizi: 282 "işlem" gerçekte 282 **çıkış olayı**; TP1'de kapatılan %40'lık parçalar ayrı kazanç sayıldığı için win rate (%72) şişiyordu. Gerçek beklenti negatifti: TP1 kazancı 0.4×1.2 ATR iken tam stop 1.5 ATR — kazanç/kayıp kırılganlığı ~3.3x, yani break-even için %77+ işlem bazlı WR gerekiyor.
+
+Alınan önlemler (hepsi `config.py`'den yönetilir):
+
+| Değişiklik | Eski | Yeni | Gerekçe |
+|---|---|---|---|
+| `MIN_SKOR` | 3 | **4** | Hacim onayı (≥1.3x) zorunlu; logda Vol 0.7x ile girilen 3/4 sinyaller negatif EV kaynağıydı |
+| `MAX_AYNI_YON` | 2 | **1** | Taramada tüm sinyaller tek yöndeydi (SHORT); korele çift stop riski |
+| `COOLDOWN_DAKIKA` | 90 | **240** | STOP sonrası 1h sinyal hâlâ geçerliyken tekrar girip aynı chop'ta ikinci stop |
+| BTC rejim filtresi | yok | **aktif** | BTC dışı coinler BTC 4h trendinin tersine gitmez |
+| BE seviyesi | sinyal fiyatı | **gerçek doluş fiyatı** | TP1 sonrası BE artık gerçekten başa baş |
+| İstatistik | olay bazlı | **işlem bazlı** (`/istatistik`) | Kısmi TP parçaları tek işleme toplanır; break-even WR ve beklenti gösterilir |
+
+> `/istatistik` komutu: işlem bazlı WR, ortalama kazanç/kayıp oranı, break-even WR, çıkış nedenleri dökümü ve en çok kaybettiren semboller. Yeni kayıtlar `poz_id` ile gruplanır; eski kayıtlarda symbol+entry fallback'i kullanılır.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.
@@ -48,6 +65,8 @@ Bot ayaktayken Telegram sohbetinden şu komutlar sorulabilir. Yanıtlar yalnızc
 |---|---|
 | `/durum` | Açık pozisyonlar + bakiye/efektif/günlük PnL/drawdown/cooldown özeti |
 | `/pozisyonlar` | Yalnızca açık pozisyonların özeti |
+| `/istatistik` | İşlem bazlı WR, ort. kazanç/kayıp, break-even WR, çıkış nedenleri dökümü |
+| `/state` | `scalp_bot_state.json` dosyasını belge olarak gönderir (ücretsiz Render planında shell erişimi olmadan yedek/analiz için) |
 | `/hata` | Son hata kayıtları + sistem durumu (başlangıç, son tarama) |
 | `/yardim` | Komut listesi |
 

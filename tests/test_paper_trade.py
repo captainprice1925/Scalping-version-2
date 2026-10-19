@@ -63,13 +63,17 @@ class PaperTradeRiskTests(unittest.TestCase):
 
     def test_total_open_stop_risk_is_capped_at_two_percent(self):
         trade = self.open_long("ONEUSDT")
-        self.assertTrue(trade.islem_ac("TWOUSDT", "LONG", 100.0, 1.0, 3, self.frame))
+        # V6.1: MAX_AYNI_YON=1 — aynı yönde ikinci pozisyon engellenir.
+        self.assertFalse(trade.islem_ac("TWOUSDT", "LONG", 100.0, 1.0, 3, self.frame))
+        # Ters yön açılabilir (MAX_POZISYON=2 hâlâ dolmadı).
+        self.assertTrue(trade.islem_ac("TWOUSDT", "SHORT", 100.0, 1.0, 3, self.frame))
 
         self.assertLessEqual(
             trade._toplam_acik_risk(),
             trade._efektif_bakiye_hesapla() * config.MAX_TOPLAM_RISK_YUZDE + 1e-8,
         )
-        self.assertFalse(trade.islem_ac("THREEUSDT", "LONG", 100.0, 1.0, 3, self.frame))
+        # Üçüncü pozisyon: MAX_POZISYON=2 sınırına takılır.
+        self.assertFalse(trade.islem_ac("THREEUSDT", "SHORT", 100.0, 1.0, 3, self.frame))
 
     def test_tp3_cross_processes_tp1_tp2_and_tp3_in_order(self):
         trade = self.open_long()
@@ -257,11 +261,53 @@ class PaperTradeRiskTests(unittest.TestCase):
         trade = self.open_long()
         trade.pozisyon_guncelle("TESTUSDT", 100.2, 101.3, 100.1, 101.2)
         self.assertEqual(60, trade.pozisyonlar[0]["kalan_yuzde"])
-        self.assertEqual(100.0, trade.pozisyonlar[0]["sl"])
+        # V6.1: BE, gerçek doluş fiyatına (giriş slippage dahil) çekilir.
+        self.assertAlmostEqual(
+            trade.pozisyonlar[0]["sl"],
+            100.0 * (1 + config.GIRIS_SLIPPAGE_ORANI),
+            places=8,
+        )
 
-        trade.pozisyon_guncelle("TESTUSDT", 101.0, 101.0, 99.9, 99.95)
+        be_seviyesi = trade.pozisyonlar[0]["sl"]
+        trade.pozisyon_guncelle(
+            "TESTUSDT", be_seviyesi, be_seviyesi, be_seviyesi - 0.1, be_seviyesi - 0.05
+        )
         self.assertEqual([], trade.pozisyonlar)
         self.assertEqual(["TP1", "BE"], [x["sebep"] for x in trade.islem_gecmisi])
+
+    def test_statistics_groups_partial_exits_into_single_trade(self):
+        trade = self.open_long()
+        # TP1'e kadar çıkar, sonra BE'ye stoplanır -> 2 çıkış olayı, 1 işlem
+        trade.pozisyon_guncelle("TESTUSDT", 100.2, 101.3, 100.1, 101.2)
+        be_seviyesi = trade.pozisyonlar[0]["sl"]
+        trade.pozisyon_guncelle(
+            "TESTUSDT", be_seviyesi, be_seviyesi, be_seviyesi - 0.1, be_seviyesi - 0.05
+        )
+        metin = trade.istatistik()
+
+        self.assertIn("1 işlem, 2 çıkış olayı", metin)
+        self.assertIn("TP1", metin)
+        self.assertIn("BE", metin)
+
+    def test_statistics_empty_history(self):
+        trade = PaperTrade()
+        self.assertIn("Henüz kapanmış işlem yok", trade.istatistik())
+
+    def test_telegram_stats_command(self):
+        trade = self.open_long()
+        trade.pozisyon_guncelle("TESTUSDT", 100.2, 101.3, 100.1, 101.2)
+        cevap = telegram_komut.komut_isle("/istatistik", trade)
+        self.assertIn("İSTATİSTİK", cevap)
+
+    def test_telegram_state_command_returns_sentinel(self):
+        self.assertEqual(
+            "__STATE_GONDER__", telegram_komut.komut_isle("/state", None)
+        )
+
+    def test_state_gonder_missing_file(self):
+        # temp dizinde state dosyası yok -> uyarı metni döner, exception fırlatmaz
+        metin = telegram_komut.state_gonder("token", "chat")
+        self.assertIn("bulunamadı", metin)
 
     def test_drawdown_limit_blocks_and_resets(self):
         trade = PaperTrade()
@@ -275,6 +321,10 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertFalse(trade.drawdown_limit_asildi)
 
     def test_wsgi_starts_the_single_bot_thread_entrypoint(self):
+        try:
+            import flask  # noqa: F401
+        except ImportError:
+            self.skipTest("flask bu ortamda kurulu değil (deploy bağımlılığı)")
         sys.modules.pop("wsgi", None)
         with patch("app.start_bot") as start_bot:
             __import__("wsgi")

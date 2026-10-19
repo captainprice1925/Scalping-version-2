@@ -73,6 +73,19 @@ def main():
             print(f"\n🔍 Tarama {datetime.now().strftime('%H:%M:%S')} - {len(taranacak)} coin")
             pt.gunluk_kontrol()
 
+            # BTC 4h rejimi: BTC dışı coinlerin yönü BTC trendi ile aynı olmalı
+            btc_yukari = None
+            if config.BTC_REGIME_FILTRE:
+                try:
+                    df_btc_4h = veri_cek("BTCUSDT", config.TIMEFRAME_TREND, 300, sadece_kapali=True)
+                    if not df_btc_4h.empty:
+                        df_btc_4h = full_analysis(df_btc_4h)
+                        son_btc = df_btc_4h.iloc[-1]
+                        btc_yukari = son_btc["close"] > son_btc["ema_200"]
+                        print(f"🌐 BTC 4h rejimi: {'YUKARI ▲' if btc_yukari else 'AŞAĞI ▼'}")
+                except Exception as e:
+                    print(f"⚠️ BTC rejim hatası: {e}")
+
             for symbol in taranacak:
                 try:
                     print(f"\n🔎 {symbol}...", end=" ")
@@ -88,6 +101,15 @@ def main():
                     sinyal, skor = sinyal_kontrol(None, df_1h, df_4h, symbol, df_4h=df_4h)
 
                     if sinyal:
+                        # BTC rejim filtresi: BTC dışı coinler BTC 4h trendinin tersine gitmez
+                        if (
+                            config.BTC_REGIME_FILTRE
+                            and btc_yukari is not None
+                            and symbol != "BTCUSDT"
+                            and ((sinyal == "LONG") != btc_yukari)
+                        ):
+                            print(f"⛔ {sinyal} {skor}/4 atlandı — BTC 4h trendinin tersi")
+                            continue
                         print(f"✅ {sinyal} {skor}/4")
                         # Giriş canlı fiyattan: son 1m kapanışı
                         df_canli = veri_cek(symbol, config.POZISYON_TF, 2, sadece_kapali=False)

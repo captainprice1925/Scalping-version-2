@@ -364,7 +364,15 @@ class PaperTrade:
     def cooldown_ekle(self, symbol, dakika=90):
         self.cooldown[symbol] = datetime.now() + timedelta(minutes=dakika)
 
-    def islem_ac(self, symbol, direction, entry, atr, skor, df=None):
+    def islem_ac(
+        self, symbol, direction, entry, atr, skor, df=None, gosterge_an=None
+    ):
+        """Pozisyon açar.
+
+        gosterge_an: giriş anındaki indikatör anlık görüntüsü (sadece kayıt,
+        karar vermez). Çıkış kayıtlarına da taşınır; /istatistik'te kazanan vs
+        kaybeden karşılaştırması için kullanılır.
+        """
         if self.gunluk_kontrol():
             print(f"⛔ {symbol}: günlük kayıp limiti aktif")
             return False
@@ -414,6 +422,8 @@ class PaperTrade:
         pozisyon = {
             "id": uuid4().hex,
             "symbol": symbol,
+            "direction": direction,
+            "gosterge_an": gosterge_an,
             "direction": direction,
             "entry": entry,
             "giris_fiyat": boyut["giris_fiyati"],
@@ -607,6 +617,7 @@ class PaperTrade:
         self.islem_gecmisi.append(
             {
                 "poz_id": pozisyon.get("id"),
+                "gosterge_an": pozisyon.get("gosterge_an"),
                 "symbol": pozisyon["symbol"],
                 "direction": pozisyon["direction"],
                 "entry": pozisyon["giris_fiyat"],
@@ -670,6 +681,10 @@ class PaperTrade:
                 "pnl": sum(k["pnl"] for k in kayitlar),
                 "komisyon": sum(k["komisyon"] for k in kayitlar),
                 "sebepler": [k["sebep"] for k in kayitlar],
+                "gosterge": next(
+                    (k.get("gosterge_an") for k in kayitlar if k.get("gosterge_an")),
+                    None,
+                ),
             }
             gruplar[anahtar] = sonuclar
 
@@ -706,6 +721,11 @@ class PaperTrade:
         ]
         satirlar.append("🔎 Çıkış nedenleri:\n" + "\n".join(sebep_satirlari))
 
+        # Gösterge karşılaştırması: giriş anındaki anlık görüntüyü kazanan ve
+        # kaybeden işlem gruplarının ortalamasıyla karşılaştırır. Amaç hangi
+        # göstergenin (varsa) sonuç ayrıştırıcı olduğunu kanıta dayalı görmektir.
+        satirlar.extend(self._gosterge_karsilastirma(trades))
+
         sembol_pnl = {}
         for t in trades:
             sembol_pnl[t["symbol"]] = sembol_pnl.get(t["symbol"], 0.0) + t["pnl"]
@@ -716,6 +736,46 @@ class PaperTrade:
                 + ", ".join(f"{s} ${p:+.2f}" for s, p in en_kotu)
             )
         return "\n".join(satirlar)
+
+    def _gosterge_karsilastirma(self, trades):
+        """Kazanan ve kaybeden işlem gruplarının giriş anı göstergelerini karşılaştırır.
+
+        Kayıt amaçlıdır; hangi göstergenin sonucu ayrıştırdığını kanıta dayalı
+        gösterir. Örnek satır: "rsi_1h: 41.2 | 58.7" → kazananlar daha düşük
+        RSI ile girmiş. Örneklem küçükken yorumlamak riskli; 30+ işlemde anlamlıdır.
+        """
+        kazanan = [t for t in trades if t["pnl"] > 0 and t.get("gosterge")]
+        kaybeden = [t for t in trades if t["pnl"] <= 0 and t.get("gosterge")]
+        if not kazanan or not kaybeden:
+            return []
+
+        def ortalama(grup, anahtar):
+            degerler = []
+            for t in grup:
+                deger = t["gosterge"].get(anahtar)
+                if isinstance(deger, bool):
+                    deger = float(deger)
+                if not isinstance(deger, (int, float)) or deger != deger:
+                    continue
+                degerler.append(float(deger))
+            if not degerler:
+                return None
+            return sum(degerler) / len(degerler)
+
+        anahtarlar = []
+        for t in kazanan + kaybeden:
+            for anahtar in t["gosterge"]:
+                if anahtar not in anahtarlar:
+                    anahtarlar.append(anahtar)
+
+        satirlar = ["📈 Göstergeler — giriş anı (kazanan ort | kaybeden ort):"]
+        for anahtar in anahtarlar:
+            w = ortalama(kazanan, anahtar)
+            l = ortalama(kaybeden, anahtar)
+            if w is None or l is None:
+                continue
+            satirlar.append(f"  {anahtar}: {w:.3g} | {l:.3g}")
+        return satirlar if len(satirlar) > 1 else []
 
     def rapor(self):
         print("\n" + "=" * 60 + "\n📊 PAPER TRADE V6 RAPORU\n" + "=" * 60)

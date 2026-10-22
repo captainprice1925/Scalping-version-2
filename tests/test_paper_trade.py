@@ -309,6 +309,67 @@ class PaperTradeRiskTests(unittest.TestCase):
         metin = telegram_komut.state_gonder("token", "chat")
         self.assertIn("bulunamadı", metin)
 
+    def test_indicator_snapshot_saved_and_carried_to_history(self):
+        trade = PaperTrade()
+        snap = {"rsi_1h": 41.5, "vol_ratio": 1.4, "btc_yukari": False}
+        self.assertTrue(
+            trade.islem_ac(
+                "TESTUSDT", "LONG", 100.0, 1.0, 3, self.frame, gosterge_an=snap
+            )
+        )
+        self.assertEqual(snap, trade.pozisyonlar[0]["gosterge_an"])
+
+        # Tam kapanış (TP3) sonrası çıkış kaydı göstergeyi taşımalı
+        trade.pozisyon_guncelle("TESTUSDT", 100.0, 103.0, 100.0, 102.7)
+        self.assertEqual([], trade.pozisyonlar)
+        self.assertTrue(trade.islem_gecmisi)
+        self.assertTrue(
+            all(k.get("gosterge_an") == snap for k in trade.islem_gecmisi)
+        )
+
+    def test_statistics_compares_indicators_for_winners_and_losers(self):
+        trade = PaperTrade()
+        # Kazanan LONG (gösterge: düşük RSI) + kaybeden SHORT (yüksek RSI)
+        self.assertTrue(
+            trade.islem_ac(
+                "WINUSDT", "LONG", 100.0, 1.0, 3, self.frame,
+                gosterge_an={"rsi_1h": 45.0},
+            )
+        )
+        self.assertTrue(
+            trade.islem_ac(
+                "LOSEUSDT", "SHORT", 100.0, 1.0, 3, self.frame,
+                gosterge_an={"rsi_1h": 60.0},
+            )
+        )
+        # WIN: TP3'e tam vuruş → kârlı tek işlem
+        trade.pozisyon_guncelle("WINUSDT", 100.0, 103.0, 100.0, 102.7)
+        # LOSE: SL yukarı kırılışı → zararlı tek işlem
+        trade.pozisyon_guncelle("LOSEUSDT", 101.0, 102.0, 100.8, 101.6)
+
+        metin = trade.istatistik()
+        self.assertIn("Göstergeler", metin)
+        self.assertIn("rsi_1h", metin)
+        self.assertIn("45", metin)
+        self.assertIn("60", metin)
+
+    def test_macd_histogram_calculated_in_full_analysis(self):
+        from faz1_engine import full_analysis
+
+        df = pd.DataFrame(
+            {
+                "open": [100.0] * 220,
+                "high": [101.0] * 220,
+                "low": [99.0] * 220,
+                "close": [100.0 + (i % 7) * 0.1 for i in range(220)],
+                "volume": [1000.0] * 220,
+                "time": pd.date_range("2026-01-01", periods=220, freq="1h"),
+            }
+        )
+        result = full_analysis(df)
+        self.assertIn("macd_hist", result.columns)
+        self.assertFalse(result["macd_hist"].isna().iloc[-1])
+
     def test_margin_cap_scales_with_equity(self):
         from veri_cekici import spread_orani
 

@@ -127,7 +127,37 @@ def main():
                         df_canli = veri_cek(symbol, config.POZISYON_TF, 2, sadece_kapali=False)
                         entry = df_canli['close'].iloc[-1] if not df_canli.empty else df_1h['close'].iloc[-1]
                         atr = df_1h['atr'].iloc[-1]
-                        pt.islem_ac(symbol, sinyal, entry, atr, skor, df=df_1h)
+                        # Gösterge anlık görüntüsü: sadece kayıt, kararda kullanılmaz.
+                        # Kayıt hatası asla girişi engellemez.
+                        try:
+                            son_1h = df_1h.iloc[-1]
+                            son_4h = df_4h.iloc[-1]
+                            gosterge_an = {
+                                "rsi_1h": float(son_1h["rsi"]),
+                                "ema_dist": abs(float(son_1h["close"]) - float(son_1h["ema_21"]))
+                                / float(son_1h["close"])
+                                * 100,
+                                "vol_ratio": float(son_1h["volume_ratio"]),
+                                "atr_pct": float(son_1h["atr_pct"]),
+                                "macd_hist": float(son_1h.get("macd_hist", 0) or 0),
+                                "rsi_4h": float(son_4h["rsi"]),
+                                "ema200_dist": (float(son_4h["close"]) - float(son_4h["ema_200"]))
+                                / float(son_4h["close"])
+                                * 100,
+                            }
+                            if btc_yukari is not None:
+                                gosterge_an["btc_yukari"] = bool(btc_yukari)
+                        except Exception:
+                            gosterge_an = None
+                        pt.islem_ac(
+                            symbol,
+                            sinyal,
+                            entry,
+                            atr,
+                            skor,
+                            df=df_1h,
+                            gosterge_an=gosterge_an,
+                        )
                     else:
                         print(f"⏳ Yok {skor}/4")
 

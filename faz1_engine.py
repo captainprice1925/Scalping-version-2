@@ -32,6 +32,14 @@ def calc_volume(df):
     df['volume_ratio'] = df['volume'] / df['volume_ma20']
     return df
 
+def calc_macd(df):
+    """MACD histogram (12/26/9) — sadece giriş anı kaydı/analiz için, kararda kullanılmaz."""
+    ema12 = df['close'].ewm(span=12).mean()
+    ema26 = df['close'].ewm(span=26).mean()
+    macd = ema12 - ema26
+    df['macd_hist'] = macd - macd.ewm(span=9).mean()
+    return df
+
 def full_analysis(df):
     if df is None or len(df) < 210:
         return df
@@ -39,6 +47,7 @@ def full_analysis(df):
     df = calc_atr(df)
     df = calc_ema(df)
     df = calc_volume(df)
+    df = calc_macd(df)
     return df
 
 SITE_KATEGORI = {

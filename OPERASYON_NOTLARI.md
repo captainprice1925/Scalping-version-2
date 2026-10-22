@@ -53,6 +53,7 @@ Alınan önlemler (hepsi `config.py`'den yönetilir):
 | Girişte spread | yok (6 saatte bir) | **anlık kontrol** | Sinyal anında spread açılabilir; `SPREAD_MAX` üstü giriş yok, okunamazsa giriş atlanır |
 | Marjin tavanı | sabit $10 | **max($10, bakiye×%10)** | Bakiye büyüyünce kazanç artık kilitlenmiyor |
 | Fallback listesi | TUTUSDT içeriyor | **temizlendi** | Fallback aktifse mikro-cap'e girilmez |
+| Gösterge kaydı | yok | **giriş anı anlık görüntü** | RSI/EMA mesafe/hacim/ATR/MACD/4h trend/BTC rejimi her girişte kaydedilir; `/istatistik`'te kazanan vs kaybeden ortalamaları gösterilir. Kararda kullanılmaz, sadece veridir |
 
 > `/istatistik` komutu: işlem bazlı WR, ortalama kazanç/kayıp oranı, break-even WR, çıkış nedenleri dökümü ve en çok kaybettiren semboller. Yeni kayıtlar `poz_id` ile gruplanır; eski kayıtlarda symbol+entry fallback'i kullanılır.
 

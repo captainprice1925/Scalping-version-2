@@ -309,6 +309,26 @@ class PaperTradeRiskTests(unittest.TestCase):
         metin = telegram_komut.state_gonder("token", "chat")
         self.assertIn("bulunamadı", metin)
 
+    def test_margin_cap_scales_with_equity(self):
+        from veri_cekici import spread_orani
+
+        # Spread helper'ı: geçerli ve eksik book durumları
+        self.assertAlmostEqual(
+            spread_orani({"bids": [[99.95, 1]], "asks": [[100.0, 1]]}),
+            0.0005,
+            places=8,
+        )
+        self.assertIsNone(spread_orani({"bids": [], "asks": [[100.0, 1]]}))
+        self.assertIsNone(spread_orani(None))
+
+        # Bakiye $500 iken marjin tavanı sabit $10'u aşabilmeli (ölçekleme)
+        trade = PaperTrade()
+        trade.bakiye = 500.0
+        self.assertTrue(trade.islem_ac("BIGUSDT", "LONG", 100.0, 1.0, 3, self.frame))
+        marjin = trade.pozisyonlar[0]["miktar"]
+        self.assertGreater(marjin, config.MAX_ISLEM_MARJINI)
+        self.assertLessEqual(marjin, 500.0 * config.MAX_ISLEM_MARJINI_ORAN + 1e-8)
+
     def test_drawdown_limit_blocks_and_resets(self):
         trade = PaperTrade()
         trade.peak_bakiye = 100.0

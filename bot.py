@@ -2,7 +2,7 @@ import os, time, requests
 from datetime import datetime
 import config
 import telegram_komut
-from veri_cekici import fonlama_gecmisi_cek, get_exchange, veri_cek
+from veri_cekici import fonlama_gecmisi_cek, get_exchange, spread_kontrol, veri_cek
 from faz1_engine import full_analysis, get_dinamik_coins
 from faz2_sinyal import sinyal_kontrol
 from paper_trade import PaperTrade
@@ -109,6 +109,18 @@ def main():
                             and ((sinyal == "LONG") != btc_yukari)
                         ):
                             print(f"⛔ {sinyal} {skor}/4 atlandı — BTC 4h trendinin tersi")
+                            continue
+                        # Giriş anında spread doğrulaması (liste 6 saatte bir
+                        # bakıyordu; sinyal anında spread açılmış olabilir)
+                        spread = spread_kontrol(symbol)
+                        if spread is None:
+                            print(f"⛔ {symbol}: spread okunamadı — giriş atlandı")
+                            continue
+                        if spread > config.SPREAD_MAX:
+                            print(
+                                f"⛔ {symbol}: spread yüksek "
+                                f"(%{spread * 100:.3f} > %{config.SPREAD_MAX * 100:.3f}) — giriş atlandı"
+                            )
                             continue
                         print(f"✅ {sinyal} {skor}/4")
                         # Giriş canlı fiyattan: son 1m kapanışı

@@ -15,7 +15,10 @@ RISK_YUZDE_ISLEM = 0.01              # Kullanıcı tercihi: işlem başına serm
 MAX_TOPLAM_RISK_YUZDE = 0.02         # Aynı anda açık tüm işlemlerde en fazla %2 tahmini risk
 # Marjin sınırları 10× kaldıraçta notional aralığını (~25–100 USDT) koruyacak şekilde ölçeklendi.
 MIN_ISLEM_MARJINI = 2.5
+# V6.1: Tavan bakiyeyle ölçeklenir — sabit $10, bakiye $500 olsa bile kazancı
+# $10 marjine kilitliyordu. Sabit değer taban (küçük bakiyede eski davranış).
 MAX_ISLEM_MARJINI = 10
+MAX_ISLEM_MARJINI_ORAN = 0.10          # efektif bakiyenin %10'u
 MAX_TOPLAM_MARJIN_YUZDE = 0.30        # Açık marjin toplamı sermayenin %30'unu geçmez
 MAX_POZISYON = 2
 # V6.1: Aynı yönde ikinci pozisyon yasak — logda tüm sinyaller aynı anda SHORT

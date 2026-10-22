@@ -49,6 +49,36 @@ def veri_cek(symbol, interval, limit=500, sadece_kapali=False):
         return pd.DataFrame()
 
 
+def spread_orani(ob):
+    """Order book'un ilk seviye spread'ini oran olarak döndürür.
+
+    None: book eksik/geçersiz. Örnek: 0.0005 → %0.05 spread.
+    """
+    if not ob or not ob.get("bids") or not ob.get("asks"):
+        return None
+    bid = ob["bids"][0][0]
+    ask = ob["asks"][0][0]
+    if ask <= 0:
+        return None
+    return (ask - bid) / ask
+
+
+def spread_kontrol(symbol):
+    """Giriş anındaki spread'i ölçer.
+
+    Liste hazırlığındaki spread kontrolü 6 saatte bir çalışıyordu; sinyal anında
+    (volatilite tam da yükselirken) spread açılabilir. Giriş bu yüzden anlık
+    olarak doğrulanır. Veri okunamazsa None döner ve giriş emniyet için atlanır.
+    """
+    try:
+        ob = gateio.fetch_order_book(_gate_symbol(symbol), 5)
+        return spread_orani(ob)
+    except (ccxt.BaseError, ValueError) as error:
+        print(f"⚠️ {symbol} spread verisi alınamadı: {error}")
+        telegram_komut.hata_ekle(f"{symbol} spread", error)
+        return None
+
+
 def fonlama_gecmisi_cek(symbol, limit=100):
     """Gate USDT perpetual fonlama geçmişini zaman damgası ve oran ile döndürür.
 

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import config
 
-FALLBACK_COINS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","TUTUSDT","BNBUSDT"]
+FALLBACK_COINS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","AVAXUSDT","LINKUSDT","ADAUSDT","WLDUSDT","ZECUSDT","BNBUSDT"]
 
 def calc_rsi(df, period=14):
     delta = df['close'].diff()

@@ -50,6 +50,9 @@ Alınan önlemler (hepsi `config.py`'den yönetilir):
 | BTC rejim filtresi | yok | **aktif** | BTC dışı coinler BTC 4h trendinin tersine gitmez |
 | BE seviyesi | sinyal fiyatı | **gerçek doluş fiyatı** | TP1 sonrası BE artık gerçekten başa baş |
 | İstatistik | olay bazlı | **işlem bazlı** (`/istatistik`) | Kısmi TP parçaları tek işleme toplanır; break-even WR ve beklenti gösterilir |
+| Girişte spread | yok (6 saatte bir) | **anlık kontrol** | Sinyal anında spread açılabilir; `SPREAD_MAX` üstü giriş yok, okunamazsa giriş atlanır |
+| Marjin tavanı | sabit $10 | **max($10, bakiye×%10)** | Bakiye büyüyünce kazanç artık kilitlenmiyor |
+| Fallback listesi | TUTUSDT içeriyor | **temizlendi** | Fallback aktifse mikro-cap'e girilmez |
 
 > `/istatistik` komutu: işlem bazlı WR, ortalama kazanç/kayıp oranı, break-even WR, çıkış nedenleri dökümü ve en çok kaybettiren semboller. Yeni kayıtlar `poz_id` ile gruplanır; eski kayıtlarda symbol+entry fallback'i kullanılır.
 

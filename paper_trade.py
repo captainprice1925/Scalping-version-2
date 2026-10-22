@@ -331,7 +331,10 @@ class PaperTrade:
             efektif_bakiye * config.MAX_TOPLAM_MARJIN_YUZDE - kullanilan_marjin
         )
         marjin_limiti = min(
-            config.MAX_ISLEM_MARJINI,
+            max(
+                config.MAX_ISLEM_MARJINI,
+                efektif_bakiye * config.MAX_ISLEM_MARJINI_ORAN,
+            ),
             efektif_bakiye * config.MAX_TOPLAM_MARJIN_YUZDE,
             musait_toplam_marjin,
         )

@@ -57,6 +57,20 @@ Alınan önlemler (hepsi `config.py`'den yönetilir):
 
 > `/istatistik` komutu: işlem bazlı WR, ortalama kazanç/kayıp oranı, break-even WR, çıkış nedenleri dökümü ve en çok kaybettiren semboller. Yeni kayıtlar `poz_id` ile gruplanır; eski kayıtlarda symbol+entry fallback'i kullanılır.
 
+## V6.2 — Giriş rejimi filtresi (06.11.2026)
+
+41 işlemlik `scalp_bot_state.json` analizi: TP1 isabeti %56.1, teorik rastgele yürüyüş isabeti %55.6 — yani yön tahmini rastgele ile aynıydı; komisyonlar (−$0.086/işlem) beklentiyi negatife çekiyordu (−$0.092/işlem). Gösterge karşılaştırması iki güvenilir ayırıcı buldu (her ikisi de ilk 20 / son 21 işlem yarı-örneklem testinde tutarlı):
+
+| Koşul | Geçen grup | Reddedilen grup |
+|---|---|---|
+| `ema_dist ≥ 0.45` | n=14, WR %79, EV **+$0.242** | n=27, WR %44, EV −$0.265 |
+| `vol_ratio ≤ 1.8` | n=25, EV +$0.031 | n=16, EV **−$0.283** |
+| **İkisi birlikte** | **n=8, WR %88, EV +$0.446** | n=33, toplam −$7.32 |
+
+`faz2_sinyal.calculate_score_fatih` içinde skorlamadan önce sert eleme olarak uygulanır (`MIN_EMA_DIST`, `MAX_VOL_RATIO`). Etki: giriş bandı `0.45 ≤ ema_dist < 0.8` ve `1.3 ≤ vol_ratio ≤ 1.8` ile sınırlanır. Beklenen işlem sıklığı günde ~0.6'ya düşer (az ama kârlı). Doğrulama: sonraki ~40 işlemde filtre alt grubunun EV'si >0 kalmalı; aksi halde iki config değeriyle geri alınır.
+
+Bilinen sınırlar: 40/41 işlem SHORT olduğundan long tarafı hâlâ sınanmadı; n=8 küçük örneklem, hipotez güçlü ama kesinleşmedi.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

@@ -42,6 +42,15 @@ VOLUME_MULT = 1.3
 # olan "ucuz" sinyaller negatif EV'nin ana kaynağıydı.
 MIN_SKOR = 4
 
+# V6.2 - GİRİŞ REJİMİ FİLTRESİ (41 işlemlik state analizi; iki yarı-örneklemde
+# de tutarlı sonuç):
+#   ema_dist < 0.45   -> WR %40, EV -$0.34 ile en kötü bölge (EMA21'e çok yakın
+#                        giriş, mean-reversion'a kurban gidiyor)
+#   volume_ratio > 1.8 -> EV -$0.28 (hacim patlaması = climax, devam değil ters sinyal)
+#   Birlikte: n=8, WR %88, EV +$0.446 (net, komisyon dahil)
+MIN_EMA_DIST = 0.45    # minimum mutlak EMA21 mesafesi (%)
+MAX_VOL_RATIO = 1.8    # hacim patlaması üst sınırı
+
 # V6.1: BTC 4h rejimi, BTC dışı coinlerin yönünü filtreler. Tüm piyasa aynı
 # anda tek yöne sinyal verdiğinde korele kayıp riski düşer.
 BTC_REGIME_FILTRE = True
@@ -68,4 +77,4 @@ TARAMA_ARALIGI = 300
 COOLDOWN_DAKIKA = 240
 COOLDOWN_BE_DAKIKA = 45
 
-print("✅ Config V6.1 - %1 risk tabanlı boyutlandırma + hacim onaylı sinyal (4/4) + BTC rejim filtresi")
+print("✅ Config V6.2 - %1 risk + hacim onaylı sinyal (4/4) + BTC rejim + giriş rejimi filtresi (ema/vol)")

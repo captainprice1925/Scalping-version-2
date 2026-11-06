@@ -14,6 +14,14 @@ def calculate_score_fatih(df_4h, df_1h):
     ema_dist = abs(last_1h['close'] - last_1h['ema_21']) / last_1h['close'] * 100
     vol_ok = last_1h['volume_ratio'] >= config.VOLUME_MULT
 
+    # V6.2 giriş rejimi filtresi: skorlamaya girmeden önce sert eleme.
+    # Eşikler 41 işlemlik veriden geldi; her iki koşul da yarı-örneklem
+    # testinde (ilk 20 / son 21 işlem) tutarlıydı.
+    if ema_dist < config.MIN_EMA_DIST:
+        return 0, None
+    if last_1h['volume_ratio'] > config.MAX_VOL_RATIO:
+        return 0, None
+
     score = 0
     yon = None
 

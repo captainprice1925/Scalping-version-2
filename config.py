@@ -84,6 +84,18 @@ TP1_YUZDE = 40
 TP2_YUZDE = 30
 ZAMAN_EXIT_SAAT = 24
 
+# V6.4 ADAYI (varsayılan kapalı = 1.0). Tur maliyeti (~16 bps) baraj mesafesinden
+# bağımsızdır; TP1 1.2 ATR çok yakın olduğu için maliyet hedefin büyük kısmını
+# yiyor. 10 aylık backtest, TP/SL aynı oranda genişletilince EV'nin pozitife
+# döndüğünü gösterdi (ana evren 2.0× +10.7 bps, dış örneklemde de aynı yön).
+# 1.0 -> bugünkü davranış birebir korunur. 2.0 -> SL 3.0 / TP 5.4 / TP1 2.4 ATR,
+# zaman çıkışı 48 saat. Bu değer değiştirilirse TEK değişiklik kuralı gereği yeni
+# bir doğrulama turu başlar.
+BARAJ_GENISLETME = 1.0
+# Baraj genişletme faktörünün zaman çıkışına yansıması. Faktör 1.0 iken
+# ZAMAN_EXIT_SAAT (24 saat) ile birebir aynıdır.
+ZAMAN_EXIT_SAAT_ETKIN = max(1, int(round(ZAMAN_EXIT_SAAT * BARAJ_GENISLETME)))
+
 # Maliyet varsayımları. Gate hesabındaki güncel VIP maker/taker oranlarıyla değiştirilmeli.
 # Varsayılan, piyasa emri (taker) için her iki yönde %0,05 komisyon ve %0,03 kayma tahminidir.
 GIRIS_KOMISYON_ORANI = 0.0005
@@ -98,4 +110,7 @@ TARAMA_ARALIGI = 300
 COOLDOWN_DAKIKA = 240
 COOLDOWN_BE_DAKIKA = 45
 
-print("✅ Config V6.3 - %1 risk + hacim onaylı sinyal (4/4) + BTC rejim + giriş rejimi filtresi (ema/vol/atr bandı)")
+print(
+    f"✅ Config V6.3.2 - %1 risk + 4/4 sinyal + BTC rejim + giriş rejimi filtresi "
+    f"+ DD toparlanma (baraj ×{BARAJ_GENISLETME:g})"
+)

@@ -206,6 +206,13 @@ dayanıklı). Ancak bu canlı bir kural değişikliğidir ve V6.3 doğrulaması 
 uygulanmadı. V6.3 kapısı kapandıktan sonra V6.4 olarak, tek değişiklik kuralıyla
 uygulanabilir.
 
+**Hazırlık:** `config.BARAJ_GENISLETME` anahtarı eklendi. Varsayılan `1.0` bugünkü
+davranışı birebir korur (testli); `2.0` yapıldığında SL 3.0 / TP1 2.4 / TP2 3.78 /
+TP3 5.4 ATR ve zaman çıkışı 48 saat olur. `paper_trade`, `backtest/simule` ve
+`config.ZAMAN_EXIT_SAAT_ETKIN` aynı anahtarı okur, böylece canlı ve backtest
+paritesi korunur. `/durum` ve başlangıç mesajı artık sürüm, baraj çarpanı ve
+drawdown modunu gösterir (`🧩 V6.3.2 · baraj ×1 · DD modu: normal`).
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

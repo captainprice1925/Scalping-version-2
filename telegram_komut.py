@@ -82,7 +82,9 @@ def ozet_mesaji(pt, sadece_pozisyon=False):
         satirlar.append(
             f"💰 Nakit {pt.bakiye:.2f}$ | Efektif {efektif:.2f}$ | "
             f"Günlük PnL {pt.gunluk_gerceklesen_pnl:+.2f}$\n"
-            f"📉 Drawdown %{drawdown:.1f} | Açık stop riski {pt._toplam_acik_risk():.2f}$"
+            f"📉 Drawdown %{drawdown:.1f} | Açık stop riski {pt._toplam_acik_risk():.2f}$\n"
+            f"🧩 V6.3.2 · baraj ×{config.BARAJ_GENISLETME:g} · "
+            f"DD modu: {pt._drawdown_modu_hesapla()[0]}"
         )
         aktif_cooldown = {
             sembol: bitis

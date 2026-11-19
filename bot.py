@@ -54,7 +54,12 @@ def main():
     print("="*60)
     pt = PaperTrade(telegram_func=send_telegram)
     telegram_komut.komut_dinleyici_baslat(pt, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-    send_telegram(f"🚀 <b>FATIH V6 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n📋 Core: {config.COINS_CORE}")
+    send_telegram(
+        f"🚀 <b>FATIH V6 BAŞLADI</b>\n💰 ${pt.bakiye:.2f}\n"
+        f"📋 Core: {config.COINS_CORE}\n"
+        f"🧩 V6.3.2 · baraj ×{config.BARAJ_GENISLETME:g} · "
+        f"DD modu: {pt._drawdown_modu_hesapla()[0]}"
+    )
 
     taranacak = get_taranacak_coinler()
     son_guncelleme = datetime.now()

@@ -219,6 +219,22 @@ class PaperTrade:
             return True
         return False
 
+    def _drawdown_modu_hesapla(self):
+        """Yan etkisiz mod hesabı (raporlama/telegram için): (mod, drawdown)."""
+        efektif = self._efektif_bakiye_hesapla()
+        drawdown = (
+            (self.peak_bakiye - efektif) / self.peak_bakiye
+            if self.peak_bakiye > 0
+            else 0.0
+        )
+        if drawdown >= config.DD_SERT_DURDURMA:
+            return "durdu", drawdown
+        if drawdown >= config.MAX_DRAWDOWN:
+            return "kurtarma", drawdown
+        if drawdown <= config.DD_TOPARLANMA_ESIGI:
+            return "normal", drawdown
+        return self.drawdown_modu, drawdown
+
     def drawdown_durumu(self):
         """Histerezisli drawdown modu: normal / kurtarma / durdu.
 
@@ -227,20 +243,7 @@ class PaperTrade:
         açmıyordu. Yeni kural %20-30 arasında yarım riskle devam eder,
         %15'in altında tam boyuta döner, %30'da tam durur.
         """
-        efektif = self._efektif_bakiye_hesapla()
-        drawdown = (
-            (self.peak_bakiye - efektif) / self.peak_bakiye
-            if self.peak_bakiye > 0
-            else 0.0
-        )
-        if drawdown >= config.DD_SERT_DURDURMA:
-            mod = "durdu"
-        elif drawdown >= config.MAX_DRAWDOWN:
-            mod = "kurtarma"
-        elif drawdown <= config.DD_TOPARLANMA_ESIGI:
-            mod = "normal"
-        else:
-            mod = self.drawdown_modu
+        mod, drawdown = self._drawdown_modu_hesapla()
 
         if mod != self.drawdown_modu:
             self.drawdown_modu = mod
@@ -267,21 +270,26 @@ class PaperTrade:
         return self.drawdown_durumu() == "durdu"
 
     def akilli_sl_tp_hesapla(self, df, direction, atr, referans_fiyat=None):
-        """Giriş fiyatına göre 1,5 ATR SL ve 1,2/1,89/2,7 ATR hedefleri üretir."""
+        """Giriş fiyatına göre 1,5 ATR SL ve 1,2/1,89/2,7 ATR hedefleri üretir.
+
+        Mesafeler `config.BARAJ_GENISLETME` ile ölçeklenir (varsayılan 1.0 =
+        değişiklik yok). V6.4 adayı: 2.0 → 3,0 / 2,4 / 3,78 / 5,4 ATR.
+        """
+        olcek = config.BARAJ_GENISLETME
         close = referans_fiyat if referans_fiyat is not None else df.iloc[-1]["close"]
         if atr is None or atr <= 0 or close is None or close <= 0:
             raise ValueError("Geçerli giriş fiyatı ve ATR gerekli")
 
         if direction == "LONG":
-            sl = close - atr * config.SL_ATR
-            tp1 = close + atr * config.BE_ATR
-            tp2 = close + atr * config.TP_ATR * 0.7
-            tp3 = close + atr * config.TP_ATR
+            sl = close - atr * config.SL_ATR * olcek
+            tp1 = close + atr * config.BE_ATR * olcek
+            tp2 = close + atr * config.TP_ATR * olcek * 0.7
+            tp3 = close + atr * config.TP_ATR * olcek
         else:
-            sl = close + atr * config.SL_ATR
-            tp1 = close - atr * config.BE_ATR
-            tp2 = close - atr * config.TP_ATR * 0.7
-            tp3 = close - atr * config.TP_ATR
+            sl = close + atr * config.SL_ATR * olcek
+            tp1 = close - atr * config.BE_ATR * olcek
+            tp2 = close - atr * config.TP_ATR * olcek * 0.7
+            tp3 = close - atr * config.TP_ATR * olcek
 
         risk = abs(close - sl)
         odul = abs(tp3 - close)
@@ -291,7 +299,7 @@ class PaperTrade:
             "tp2": tp2,
             "tp3": tp3,
             "rr": odul / risk if risk > 0 else 0,
-            "sl_mesafe": atr * config.SL_ATR,
+            "sl_mesafe": atr * config.SL_ATR * olcek,
         }
 
     def _tahmini_likidasyon_fiyati(self, giris_fiyati, direction):
@@ -575,7 +583,7 @@ class PaperTrade:
                     acilis = datetime.fromisoformat(pozisyon["acilis_zamani"])
                     if (
                         datetime.fromisoformat(bar_time) - acilis
-                    ).total_seconds() > config.ZAMAN_EXIT_SAAT * 3600:
+                    ).total_seconds() > config.ZAMAN_EXIT_SAAT_ETKIN * 3600:
                         self.pozisyon_kapat(
                             pozisyon, c, pozisyon["kalan_yuzde"], "ZAMAN"
                         )

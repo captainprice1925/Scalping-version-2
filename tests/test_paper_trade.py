@@ -456,6 +456,24 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertFalse(trade._max_drawdown_kontrol())
         self.assertFalse(trade.drawdown_limit_asildi)
 
+    def test_baraj_genisletme_faktoru(self):
+        """Varsayılan 1.0 bugünkü davranışı birebir korur; faktör ölçekler."""
+        trade = PaperTrade()
+        dar = trade.akilli_sl_tp_hesapla(None, "SHORT", 1.0, referans_fiyat=100.0)
+        self.assertAlmostEqual(dar["sl"], 100.0 + config.SL_ATR, places=9)
+        self.assertAlmostEqual(dar["tp1"], 100.0 - config.BE_ATR, places=9)
+        self.assertAlmostEqual(dar["tp2"], 100.0 - config.TP_ATR * 0.7, places=9)
+        self.assertAlmostEqual(dar["tp3"], 100.0 - config.TP_ATR, places=9)
+        self.assertAlmostEqual(dar["sl_mesafe"], config.SL_ATR, places=9)
+        self.assertEqual(config.ZAMAN_EXIT_SAAT_ETKIN, config.ZAMAN_EXIT_SAAT)
+
+        with patch.object(config, "BARAJ_GENISLETME", 2.0):
+            gen = trade.akilli_sl_tp_hesapla(None, "SHORT", 1.0, referans_fiyat=100.0)
+        self.assertAlmostEqual(gen["sl"], 100.0 + 2 * config.SL_ATR, places=9)
+        self.assertAlmostEqual(gen["tp1"], 100.0 - 2 * config.BE_ATR, places=9)
+        self.assertAlmostEqual(gen["tp3"], 100.0 - 2 * config.TP_ATR, places=9)
+        self.assertAlmostEqual(gen["sl_mesafe"], 2 * config.SL_ATR, places=9)
+
     def test_wsgi_starts_the_single_bot_thread_entrypoint(self):
         try:
             import flask  # noqa: F401

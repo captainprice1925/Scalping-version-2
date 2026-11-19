@@ -19,12 +19,12 @@ import config
 def varsayilan_cfg():
     return {
         "BUTCE_SANAL": config.BUTCE_SANAL,
-        "SL_ATR": config.SL_ATR,
-        "BE_ATR": config.BE_ATR,
-        "TP_ATR": config.TP_ATR,
+        "SL_ATR": config.SL_ATR * config.BARAJ_GENISLETME,
+        "BE_ATR": config.BE_ATR * config.BARAJ_GENISLETME,
+        "TP_ATR": config.TP_ATR * config.BARAJ_GENISLETME,
         "TP1_YUZDE": config.TP1_YUZDE,
         "TP2_YUZDE": config.TP2_YUZDE,
-        "ZAMAN_EXIT_SAAT": config.ZAMAN_EXIT_SAAT,
+        "ZAMAN_EXIT_SAAT": config.ZAMAN_EXIT_SAAT_ETKIN,
         "GIRIS_KOMISYON_ORANI": config.GIRIS_KOMISYON_ORANI,
         "CIKIS_KOMISYON_ORANI": config.CIKIS_KOMISYON_ORANI,
         "GIRIS_SLIPPAGE_ORANI": config.GIRIS_SLIPPAGE_ORANI,
@@ -104,11 +104,14 @@ def eski_dd_cfg():
 
 
 def genis_cfg(oran=2.0, taban=None):
-    """TP/SL mesafelerini ATR cinsinden `oran` katına çıkarır (baraj genişletme).
+    """TP/SL mesafelerini taban cfg'ye göre `oran` katına çıkarır (baraj genişletme).
 
     Gerekçe: tur maliyeti (~16 bps) baraj mesafesinden bağımsız sabittir; çok
     dar barajlarda maliyet hedefin büyük kısmını yer. Bu varyant sadece
     karşılaştırma içindir, canlı kural değildir.
+
+    Canlı kurallar `config.BARAJ_GENISLETME` ile zaten ölçekliyse bu çarpan
+    onun üzerine biner (varsayılan 1.0 iken etkisi yoktur).
 
     `ZAMAN_EXIT_SAAT` de aynı oranda ölçeklenir; aksi halde geniş barajlar
     zaman çıkışına takılıp elma-armut karşılaştırması olur.

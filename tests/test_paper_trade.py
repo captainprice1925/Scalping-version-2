@@ -442,10 +442,17 @@ class PaperTradeRiskTests(unittest.TestCase):
         trade = PaperTrade()
         trade.peak_bakiye = 100.0
         trade.bakiye = 79.0
-        self.assertTrue(trade._max_drawdown_kontrol())
+        # V6.3.2: %20-30 arası artık tam durdurma değil, yarım riskli kurtarma.
+        self.assertEqual("kurtarma", trade.drawdown_durumu())
+        self.assertFalse(trade._max_drawdown_kontrol())
         self.assertTrue(trade.drawdown_limit_asildi)
 
+        trade.bakiye = 69.0
+        self.assertEqual("durdu", trade.drawdown_durumu())
+        self.assertTrue(trade._max_drawdown_kontrol())
+
         trade.bakiye = 90.0
+        self.assertEqual("normal", trade.drawdown_durumu())
         self.assertFalse(trade._max_drawdown_kontrol())
         self.assertFalse(trade.drawdown_limit_asildi)
 

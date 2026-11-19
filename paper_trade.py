@@ -29,6 +29,7 @@ class PaperTrade:
             self.gunluk_gerceklesen_pnl = kayitli.get("gunluk_gerceklesen_pnl", 0.0)
             self.peak_bakiye = kayitli.get("peak_bakiye", config.BUTCE_SANAL)
             self.drawdown_limit_asildi = kayitli.get("drawdown_limit_asildi", False)
+            self.drawdown_modu = kayitli.get("drawdown_modu", "normal")
             self._eski_state_tasima()
             print(f"✅ Kayıtlı state yüklendi (Bakiye: ${self.bakiye:.2f})")
         else:
@@ -42,6 +43,7 @@ class PaperTrade:
             self.gunluk_gerceklesen_pnl = 0.0
             self.peak_bakiye = config.BUTCE_SANAL
             self.drawdown_limit_asildi = False
+            self.drawdown_modu = "normal"
             print("🆕 Yeni state başlatıldı")
 
     def _eski_state_tasima(self):
@@ -69,6 +71,7 @@ class PaperTrade:
                 "gunluk_gerceklesen_pnl": self.gunluk_gerceklesen_pnl,
                 "peak_bakiye": self.peak_bakiye,
                 "drawdown_limit_asildi": self.drawdown_limit_asildi,
+                "drawdown_modu": self.drawdown_modu,
             }
         )
 
@@ -216,36 +219,52 @@ class PaperTrade:
             return True
         return False
 
-    def _max_drawdown_kontrol(self):
-        efektif = self._efektif_bakiye_hesapla()
-        if efektif < self.peak_bakiye * (1 - config.MAX_DRAWDOWN):
-            if not self.drawdown_limit_asildi:
-                self.drawdown_limit_asildi = True
-                self._kaydet()
-                drawdown = (
-                    (self.peak_bakiye - efektif) / self.peak_bakiye * 100
-                    if self.peak_bakiye > 0
-                    else 0
-                )
-                print(
-                    f"⛔ MAX DRAWDOWN %{drawdown:.1f} - Efektif: ${efektif:.2f} "
-                    f"/ Tepe: ${self.peak_bakiye:.2f}"
-                )
-                if self.telegram:
-                    self.telegram(
-                        f"⛔ <b>MAX DRAWDOWN %{drawdown:.1f}</b>\n"
-                        f"💰 Efektif: ${efektif:.2f} / Tepe: ${self.peak_bakiye:.2f}\n"
-                        "🛑 Yeni işlem açılmayacak"
-                    )
-            return True
+    def drawdown_durumu(self):
+        """Histerezisli drawdown modu: normal / kurtarma / durdu.
 
-        if self.drawdown_limit_asildi:
-            self.drawdown_limit_asildi = False
+        V6.3.2: eski kural %20'de kalıcı kilit yaratıyordu; açık pozisyon
+        kalmayınca efektif bakiye toparlanamıyor ve bot sonsuza kadar işlem
+        açmıyordu. Yeni kural %20-30 arasında yarım riskle devam eder,
+        %15'in altında tam boyuta döner, %30'da tam durur.
+        """
+        efektif = self._efektif_bakiye_hesapla()
+        drawdown = (
+            (self.peak_bakiye - efektif) / self.peak_bakiye
+            if self.peak_bakiye > 0
+            else 0.0
+        )
+        if drawdown >= config.DD_SERT_DURDURMA:
+            mod = "durdu"
+        elif drawdown >= config.MAX_DRAWDOWN:
+            mod = "kurtarma"
+        elif drawdown <= config.DD_TOPARLANMA_ESIGI:
+            mod = "normal"
+        else:
+            mod = self.drawdown_modu
+
+        if mod != self.drawdown_modu:
+            self.drawdown_modu = mod
+            self.drawdown_limit_asildi = mod != "normal"
             self._kaydet()
-            print("✅ Drawdown eşiğin altına düştü - yeni işlemler yeniden açılabilir")
+            mesajlar = {
+                "kurtarma": (
+                    f"⚠️ Drawdown %{drawdown * 100:.1f} — kurtarma modu: "
+                    f"işlem riski %{config.DD_KURTARMA_RISK_ORANI * 100:.0f} seviyesine indi"
+                ),
+                "durdu": (
+                    f"⛔ Drawdown %{drawdown * 100:.1f} — yeni işlemler durduruldu "
+                    "(manuel müdahale gerekir)"
+                ),
+                "normal": f"✅ Drawdown %{drawdown * 100:.1f} — normal moda dönüldü",
+            }
+            print(mesajlar[mod])
             if self.telegram:
-                self.telegram("✅ Drawdown eşiğin altına düştü, yeni işlemler yeniden açılabilir")
-        return False
+                self.telegram(mesajlar[mod])
+        return mod
+
+    def _max_drawdown_kontrol(self):
+        """Geriye dönük uyum: sadece tam durdurma modunda True döner."""
+        return self.drawdown_durumu() == "durdu"
 
     def akilli_sl_tp_hesapla(self, df, direction, atr, referans_fiyat=None):
         """Giriş fiyatına göre 1,5 ATR SL ve 1,2/1,89/2,7 ATR hedefleri üretir."""
@@ -291,7 +310,7 @@ class PaperTrade:
             return levels["sl"] > likidasyon * (1 + config.LIKIDASYON_TAMPON_YUZDE), likidasyon
         return levels["sl"] < likidasyon * (1 - config.LIKIDASYON_TAMPON_YUZDE), likidasyon
 
-    def _pozisyon_boyutlandir(self, direction, entry, levels):
+    def _pozisyon_boyutlandir(self, direction, entry, levels, risk_carpani=1.0):
         giris_fiyati = self._giris_fiyati(entry, direction)
         cikis_fiyati = self._cikis_fiyati(levels["sl"], direction)
         fiyat_riski = abs(cikis_fiyati - giris_fiyati) / giris_fiyati
@@ -300,8 +319,10 @@ class PaperTrade:
         if birim_notional_risk <= 0:
             raise ValueError("Pozisyon riski hesaplanamadı")
 
+        risk_yuzde = config.RISK_YUZDE_ISLEM * risk_carpani
+        toplam_risk_yuzde = config.MAX_TOPLAM_RISK_YUZDE * risk_carpani
         efektif_bakiye = self._efektif_bakiye_hesapla()
-        toplam_risk_limiti = efektif_bakiye * config.MAX_TOPLAM_RISK_YUZDE
+        toplam_risk_limiti = efektif_bakiye * toplam_risk_yuzde
         mevcut_acik_risk = self._toplam_acik_risk()
         # Yeni işlem, efektif bakiyeyi giriş komisyonu, beklenen çıkış komisyonu
         # ve ilk fiyat kayması kadar azaltır. Toplam risk sınırı bu düşüşten sonra
@@ -311,12 +332,10 @@ class PaperTrade:
             + config.CIKIS_KOMISYON_ORANI
             + abs(cikis_fiyati - giris_fiyati) / giris_fiyati
         )
-        tek_islem_notional_limiti = (
-            efektif_bakiye * config.RISK_YUZDE_ISLEM / birim_notional_risk
-        )
+        tek_islem_notional_limiti = efektif_bakiye * risk_yuzde / birim_notional_risk
         toplam_risk_notional_limiti = (
             toplam_risk_limiti - mevcut_acik_risk
-        ) / (birim_notional_risk + acilis_etkisi_orani * config.MAX_TOPLAM_RISK_YUZDE)
+        ) / (birim_notional_risk + acilis_etkisi_orani * toplam_risk_yuzde)
         if toplam_risk_notional_limiti <= 0:
             return None
 
@@ -376,9 +395,13 @@ class PaperTrade:
         if self.gunluk_kontrol():
             print(f"⛔ {symbol}: günlük kayıp limiti aktif")
             return False
-        if self._max_drawdown_kontrol():
-            print(f"⛔ {symbol}: max drawdown limiti aktif")
+        dd_modu = self.drawdown_durumu()
+        if dd_modu == "durdu":
+            print(f"⛔ {symbol}: drawdown durdurma modu aktif")
             return False
+        risk_carpani = (
+            config.DD_KURTARMA_RISK_ORANI if dd_modu == "kurtarma" else 1.0
+        )
         if self.cooldown_kontrol(symbol):
             print(f"⏱ {symbol}: cooldown'da")
             return False
@@ -397,7 +420,9 @@ class PaperTrade:
 
         try:
             levels = self.akilli_sl_tp_hesapla(df, direction, atr, referans_fiyat=entry)
-            boyut = self._pozisyon_boyutlandir(direction, entry, levels)
+            boyut = self._pozisyon_boyutlandir(
+                direction, entry, levels, risk_carpani=risk_carpani
+            )
         except (TypeError, ValueError) as error:
             print(f"⛔ {symbol}: boyutlandırma hatası: {error}")
             return False
@@ -458,7 +483,7 @@ class PaperTrade:
                 f"💼 Marjin: ${boyut['marjin']:.2f} | Notional: ${boyut['notional']:.2f} "
                 f"| x{config.KALDIRAC}\n"
                 f"⚠️ Tahmini stop riski: ${boyut['tahmini_stop_riski']:.2f} "
-                f"(%{config.RISK_YUZDE_ISLEM * 100:.1f} hedef)\n"
+                f"(%{config.RISK_YUZDE_ISLEM * risk_carpani * 100:.1f} hedef)\n"
                 f"📊 Efektif entry: {boyut['giris_fiyati']:.4f}\n"
                 f"🛡 SL: {levels['sl']:.4f} | Tahmini liq: {likidasyon:.4f}\n"
                 f"📦 TP1: {levels['tp1']:.4f} (%{config.TP1_YUZDE})\n"

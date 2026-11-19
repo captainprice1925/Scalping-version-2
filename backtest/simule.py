@@ -53,6 +53,9 @@ def varsayilan_cfg():
         "MAX_TOPLAM_MARJIN_YUZDE": config.MAX_TOPLAM_MARJIN_YUZDE,
         "GUNLUK_KAYIP_LIMITI": config.GUNLUK_KAYIP_LIMITI,
         "MAX_DRAWDOWN": config.MAX_DRAWDOWN,
+        "DD_TOPARLANMA_ESIGI": config.DD_TOPARLANMA_ESIGI,
+        "DD_SERT_DURDURMA": config.DD_SERT_DURDURMA,
+        "DD_KURTARMA_RISK_ORANI": config.DD_KURTARMA_RISK_ORANI,
     }
 
 
@@ -74,6 +77,29 @@ def v62_cfg():
     """Sadece V6.2 (ATR bandı yok) — 7-19 Kasım canlı doğrulamasıyla eşleştirme için."""
     cfg = varsayilan_cfg()
     cfg.update({"MIN_ATR_PCT": None, "MAX_ATR_PCT": None})
+    return cfg
+
+
+def atr_only_cfg():
+    """ATR bandı korunur, V6.2'nin ema_dist tabanı kaldırılır."""
+    cfg = varsayilan_cfg()
+    cfg["MIN_EMA_DIST"] = 0.0
+    return cfg
+
+
+def maker_cfg(taban=None):
+    """Limit/maker giriş: %0,02 komisyon, giriş kayması yok (dolum varsayımı)."""
+    cfg = (taban or varsayilan_cfg()).copy()
+    cfg["GIRIS_KOMISYON_ORANI"] = 0.0002
+    cfg["GIRIS_SLIPPAGE_ORANI"] = 0.0
+    return cfg
+
+
+def eski_dd_cfg():
+    """V6.3.2 öncesi kalıcı kilit: %20'de tam durdurma, toparlanma yok."""
+    cfg = varsayilan_cfg()
+    cfg["DD_SERT_DURDURMA"] = cfg["MAX_DRAWDOWN"]
+    cfg["DD_TOPARLANMA_ESIGI"] = cfg["MAX_DRAWDOWN"]
     return cfg
 
 

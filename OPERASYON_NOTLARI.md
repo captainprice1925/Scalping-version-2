@@ -94,6 +94,33 @@ Bilinen sınırlar: 24/24 işlem SHORT; long tarafı hâlâ sınanmadı; ATR üs
 
 Davranış değişikliği yoktur (filtre/karar mantığı aynı): `pozisyon_kapat` çıkış kayıtlarına `giris_zamani` alanı eklenir ve `/istatistik` kazanan / kaybeden / STOP işlemlerinin ortalama tutma süresini saat cinsinden gösterir. Amaç: saf STOP'ların ne kadar sürdüğünü ölçmek ve "ilerlemeyen işlemden erken çık" (zaman-stop) hipotezini kanıta dayalı test edebilmek. Bu sürümden önce açılmış işlemlerde alan yoktur; ortalamaya girmez. Doğrulama verisini bulandırmaz, sadece kayıt ekler.
 
+## V6.3.2 — Drawdown toparlanma modu (19.11.2026)
+
+Risk yönetimi düzeltmesi; sinyal/filtre mantığı değişmedi (`faz2_sinyal.py` aynı).
+Eski kural %20 drawdown'da **kalıcı kilit** yaratıyordu: açık pozisyon kalmayınca
+efektif bakiye toparlanamıyor, bakiye de işlem olmadan yükselmediği için bot
+sonsuza kadar işlem açmıyordu (10 aylık backtest: Haziran'da kilit, sonraki 4 ay
+hiç işlem yok — 3667/4124 bar).
+
+Yeni kural histerezisli ve kademeli (`config.py`):
+
+| Drawdown | Mod | Davranış |
+|---|---|---|
+| < %15 | normal | tam risk (%1 işlem / %2 toplam) |
+| %15 – %20 | mevcut mod korunur | erken zıplamayı önler |
+| %20 – %30 | kurtarma | işlem riski yarıya iner (`DD_KURTARMA_RISK_ORANI=0.5`) |
+| ≥ %30 | durdu | yeni işlem yok, manuel müdahale |
+
+`paper_trade.py`: `drawdown_durumu()` modu hesaplar, `risk_carpani` boyutlandırmaya
+geçer, state'e `drawdown_modu` yazılır. `_max_drawdown_kontrol()` geriye dönük
+uyum için yalnızca `durdu` modunda `True` döner. `backtest/motor.py` aynı kuralları
+uygular (`_dd_durumu`, `boyutlandir(..., risk_carpani)`); `simule.py` içine
+`eski_dd_cfg()` (eski kalıcı kilit) karşılaştırma için eklendi.
+
+Canlı state 19.11.2026'da %7,5 drawdown'da olduğu için yeni mod **dormant**;
+V6.3 doğrulamasını etkilemez. 6 yeni test (canlı + motor modları, yarım risk,
+durdu modunda giriş engeli) eklendi; toplam 51 test.
+
 ## Backtest aracı ve 10 aylık bulgular (19.11.2026)
 
 Canlı botu etkilemeyen ayrı bir araç `backtest/` altına eklendi (hiçbir canlı
@@ -134,10 +161,10 @@ momentum) −6.6 bps, < −0.2 ise −30 bps. ATR<1.3 + SHORT MACD>0 birlikte �
 başına pozitif EV üretmiyor.
 
 **Operasyonel bulgu:** %20 max drawdown kuralı kalıcı kilit yaratıyor. Simülasyonda
-Temmuz'da eşik aşıldı; açık pozisyon kalmadığı için efektif bakiye toparlanamadı
+Haziran'da eşik aşıldı; açık pozisyon kalmadığı için efektif bakiye toparlanamadı
 ve son 4 ay hiç işlem açılmadı. Canlıda da aynı durum yaşanır: kilit, bakiye
-yükselmeden açılmaz, bakiye de işlem olmadan yükselmez. Bu kuralın bir toparlanma
-mekanizmasına (ör. %15'te yarım boyutla devam) ihtiyacı var.
+yükselmeden açılmaz, bakiye de işlem olmadan yükselmez. Bu bulgu V6.3.2'deki
+histerezisli kurtarma modunun gerekçesidir.
 
 Bu araç V6.3 canlı doğrulamasını etkilemez; karar mantığında hiçbir değişiklik
 yapılmadı.

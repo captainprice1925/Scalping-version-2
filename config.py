@@ -27,7 +27,18 @@ MAX_AYNI_YON = 1
 LIKIDASYON_TAMPON_YUZDE = 0.005       # Tahmini likidasyon ile stop arasında en az %0,5 tampon
 
 GUNLUK_KAYIP_LIMITI = 0.03
-MAX_DRAWDOWN = 0.20
+# V6.3.2 - Drawdown toparlanma modu. Eski kural %20'de kalıcı kilit yaratıyordu:
+# açık pozisyon kalmayınca efektif bakiye toparlanamıyor, bot sonsuza kadar
+# işlem açmıyordu (10 aylık backtest: Temmuz'dan sonra 4 ay hiç işlem yok).
+# Yeni kural kademeli ve histerezisli:
+#   DD < %15            -> normal (tam risk)
+#   %15 - %20 arası     -> mevcut mod korunur (erken zıplamayı önler)
+#   %20 - %30 arası     -> kurtarma: işlem riski yarıya iner
+#   >= %30              -> durdu: yeni işlem yok, manuel müdahale gerekir
+MAX_DRAWDOWN = 0.20          # kurtarma moduna giriş eşiği
+DD_TOPARLANMA_ESIGI = 0.15   # tam boyuta dönüş eşiği
+DD_SERT_DURDURMA = 0.30      # tam durdurma eşiği
+DD_KURTARMA_RISK_ORANI = 0.5 # kurtarma modunda risk çarpanı
 
 EMA_TREND = 200
 EMA_GIRIS = 21

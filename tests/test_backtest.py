@@ -210,6 +210,87 @@ class MotorTestleri(unittest.TestCase):
         self.assertEqual(0.0, bos["pnl"])
 
 
+class DrawdownTestleri(unittest.TestCase):
+    def setUp(self):
+        self._original_cwd = os.getcwd()
+        self._temp_dir = tempfile.TemporaryDirectory(prefix="bt-dd-")
+        os.chdir(self._temp_dir.name)
+
+    def tearDown(self):
+        os.chdir(self._original_cwd)
+        self._temp_dir.cleanup()
+
+    def _pt(self, bakiye, peak):
+        pt = PaperTrade()
+        pt.pozisyonlar = []
+        pt.bakiye = bakiye
+        pt.peak_bakiye = peak
+        return pt
+
+    def test_canli_drawdown_modlari(self):
+        pt = self._pt(100.0, 100.0)
+        self.assertEqual("normal", pt.drawdown_durumu())
+        pt.bakiye = 83.0  # %17: normal modda histerezis
+        self.assertEqual("normal", pt.drawdown_durumu())
+        pt.bakiye = 79.0  # %21: kurtarma
+        self.assertEqual("kurtarma", pt.drawdown_durumu())
+        pt.bakiye = 83.0  # %17: kurtarmada kalır
+        self.assertEqual("kurtarma", pt.drawdown_durumu())
+        pt.bakiye = 86.0  # %14: normale döner
+        self.assertEqual("normal", pt.drawdown_durumu())
+        pt.bakiye = 69.0  # %31: durdu
+        self.assertEqual("durdu", pt.drawdown_durumu())
+
+    def test_kurtarma_modunda_yarim_risk(self):
+        pt = self._pt(790.0, 1000.0)
+        self.assertEqual("kurtarma", pt.drawdown_durumu())
+        levels = pt.akilli_sl_tp_hesapla(None, "SHORT", 1.0, referans_fiyat=100.0)
+        tam = pt._pozisyon_boyutlandir("SHORT", 100.0, levels)
+        yarim = pt._pozisyon_boyutlandir(
+            "SHORT", 100.0, levels, risk_carpani=0.5
+        )
+        self.assertAlmostEqual(
+            yarim["notional"], tam["notional"] / 2, delta=tam["notional"] * 0.02
+        )
+
+    def test_durdu_modunda_giris_yok(self):
+        pt = self._pt(69.0, 100.0)
+        self.assertFalse(pt.islem_ac("TESTUSDT", "SHORT", 100.0, 1.0, 4))
+        self.assertEqual([], pt.pozisyonlar)
+
+    def test_kurtarma_modunda_giris_yarim_riskli(self):
+        pt = self._pt(790.0, 1000.0)
+        self.assertTrue(pt.islem_ac("TESTUSDT", "SHORT", 100.0, 1.0, 4))
+        risk = pt.pozisyonlar[0]["tahmini_stop_riski"]
+        self.assertGreater(risk, 790.0 * 0.0035)
+        self.assertLess(risk, 790.0 * 0.0055)
+
+    def test_motor_drawdown_modlari(self):
+        m = Motor(sentetik_veri(1, 900), varsayilan_cfg())
+        m.pozisyonlar = []
+        m.bakiye = 100.0
+        m.peak = 100.0
+        self.assertEqual("normal", m._dd_durumu())
+        m.bakiye = 79.0
+        self.assertEqual("kurtarma", m._dd_durumu())
+        m.bakiye = 83.0
+        self.assertEqual("kurtarma", m._dd_durumu())
+        m.bakiye = 86.0
+        self.assertEqual("normal", m._dd_durumu())
+        m.bakiye = 69.0
+        self.assertEqual("durdu", m._dd_durumu())
+
+    def test_motor_yarim_risk_boyutlandirma(self):
+        cfg = varsayilan_cfg()
+        tam = boyutlandir("SHORT", 100.0, 101.5, 1000.0, 0.0, 0.0, cfg)
+        yarim = boyutlandir(
+            "SHORT", 100.0, 101.5, 1000.0, 0.0, 0.0, cfg, risk_carpani=0.5
+        )
+        self.assertAlmostEqual(
+            yarim["notional"], tam["notional"] / 2, delta=tam["notional"] * 0.02
+        )
+
+
 class AnalizTestleri(unittest.TestCase):
     def test_sinyal_taramasi_ve_kovalar(self):
         veriler = sentetik_veri(3, 900)

@@ -114,7 +114,9 @@ def sinyal_uret(s, i, cfg, btc_yukari):
     return yon, skor, gosterge
 
 
-def boyutlandir(direction, entry, sl, efektif, mevcut_risk, kullanilan_marjin, cfg):
+def boyutlandir(
+    direction, entry, sl, efektif, mevcut_risk, kullanilan_marjin, cfg, risk_carpani=1.0
+):
     """`PaperTrade._pozisyon_boyutlandir` ile aynı hesap (parite testi var)."""
     giris = giris_fill(entry, direction, cfg)
     cikis = cikis_fill(sl, direction, cfg)
@@ -124,10 +126,12 @@ def boyutlandir(direction, entry, sl, efektif, mevcut_risk, kullanilan_marjin, c
     if birim_risk <= 0:
         return None
 
-    toplam_risk_limiti = efektif * cfg["MAX_TOPLAM_RISK_YUZDE"]
-    tek_islem_notional = efektif * cfg["RISK_YUZDE_ISLEM"] / birim_risk
+    risk_yuzde = cfg["RISK_YUZDE_ISLEM"] * risk_carpani
+    toplam_risk_yuzde = cfg["MAX_TOPLAM_RISK_YUZDE"] * risk_carpani
+    toplam_risk_limiti = efektif * toplam_risk_yuzde
+    tek_islem_notional = efektif * risk_yuzde / birim_risk
     toplam_risk_notional = (toplam_risk_limiti - mevcut_risk) / (
-        birim_risk + birim_risk * cfg["MAX_TOPLAM_RISK_YUZDE"]
+        birim_risk + birim_risk * toplam_risk_yuzde
     )
     if toplam_risk_notional <= 0:
         return None
@@ -172,6 +176,7 @@ class Motor:
         self.gun = None
         self.gun_baslangic = self.cfg["BUTCE_SANAL"]
         self.gunluk_pnl = 0.0
+        self.dd_modu = "normal"
 
     # ---------------------------------------------------------------- değerler
     def _kalan_oran(self, poz):
@@ -339,13 +344,27 @@ class Motor:
         limit = self.gun_baslangic * self.cfg["GUNLUK_KAYIP_LIMITI"]
         return max(0.0, -self.gunluk_pnl) >= limit
 
-    def _dd_aktif(self):
-        return self._efektif() < self.peak * (1 - self.cfg["MAX_DRAWDOWN"])
+    def _dd_durumu(self):
+        """Histerezisli drawdown modu: normal / kurtarma / durdu."""
+        efektif = self._efektif()
+        dd = (self.peak - efektif) / self.peak if self.peak > 0 else 0.0
+        if dd >= self.cfg["DD_SERT_DURDURMA"]:
+            mod = "durdu"
+        elif dd >= self.cfg["MAX_DRAWDOWN"]:
+            mod = "kurtarma"
+        elif dd <= self.cfg["DD_TOPARLANMA_ESIGI"]:
+            mod = "normal"
+        else:
+            mod = self.dd_modu
+        self.dd_modu = mod
+        return mod
 
     def _giris_dene(self, sembol, i, yon, skor, gosterge, t):
         cfg = self.cfg
-        if self._gunluk_kontrol(t) or self._dd_aktif():
+        mod = self._dd_durumu()
+        if self._gunluk_kontrol(t) or mod == "durdu":
             return False
+        risk_carpani = cfg["DD_KURTARMA_RISK_ORANI"] if mod == "kurtarma" else 1.0
         bitis = self.cooldown.get(sembol)
         if bitis is not None and t < bitis:
             return False
@@ -375,6 +394,7 @@ class Motor:
             self._acik_risk(),
             self._kullanilan_marjin(),
             cfg,
+            risk_carpani,
         )
         if boyut is None:
             return False

@@ -213,6 +213,29 @@ TP3 5.4 ATR ve zaman çıkışı 48 saat olur. `paper_trade`, `backtest/simule` 
 paritesi korunur. `/durum` ve başlangıç mesajı artık sürüm, baraj çarpanı ve
 drawdown modunu gösterir (`🧩 V6.3.2 · baraj ×1 · DD modu: normal`).
 
+### V6.4 — önceden kayıtlı doğrulama kapısı (onay: 20.11.2026)
+
+V6.4 = tek değişiklik: `BARAJ_GENISLETME = 1.0 → 2.0`. yeni filtre/indikatör yok.
+V6.3 kapısı kapandıktan sonra başlar; aynı anda iki değişiklik yapılmaz.
+
+| Ölçüt | Eşik |
+|---|---|
+| İşlem sayısı | ≥ 60 |
+| Beklenti (notional) | ≥ +5 bps/işlem |
+| İşlem bazlı WR | ≥ %57 |
+| Max drawdown | ≤ %15 |
+
+**Neden dolar EV kapısı değişti:** baraj genişleyince aynı %1 risk daha küçük
+notional alır (SL mesafesi 2 katı), dolayısıyla dolar EV yapısal olarak düşer.
+V6.3'ün +$0.15/işlem hedefi V6.4'te ulaşılamaz (backtest +$0.029/işlem). Bps
+birimi pozisyon büyüklüğünden bağımsızdır ve backtest karşılaştırmasıyla aynı
+birimdir. `/istatistik` bu satırı artık basıyor:
+`📐 Beklenti (notional): +X.X bps/işlem — n=N`.
+
+**Geri alma kuralı:** 60 işlem sonunda dört ölçütten herhangi biri tutmazsa
+`BARAJ_GENISLETME = 1.0` yapılır ve V6.3 davranışına dönülür (tek satır, state
+uyumlu). Kapı geçilirse değer 2.0'da kalır ve yeni tur açılmaz.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

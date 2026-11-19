@@ -658,6 +658,7 @@ class PaperTrade:
                 "yuzde": yuzde,
                 "sebep": sebep,
                 "skor": pozisyon.get("skor", 0),
+                "notional": pozisyon["notional"],
                 "brut_pnl": brut_pnl,
                 "komisyon": giris_komisyon_payi + cikis_komisyonu,
                 "pnl": net_pnl,
@@ -713,6 +714,9 @@ class PaperTrade:
                 "direction": kayitlar[0]["direction"],
                 "skor": kayitlar[0].get("skor", 0),
                 "pnl": sum(k["pnl"] for k in kayitlar),
+                "notional": next(
+                    (k.get("notional") for k in kayitlar if k.get("notional")), None
+                ),
                 "komisyon": sum(k["komisyon"] for k in kayitlar),
                 "sebepler": [k["sebep"] for k in kayitlar],
                 "gosterge": next(
@@ -748,6 +752,16 @@ class PaperTrade:
             f"🎲 Beklenti/işlem: ${ev:+.3f} | Net PnL: ${net:+.2f} (fonlama: ${fonlama:+.2f})\n"
             f"💳 Toplam komisyon: ${komisyon:.2f}"
         )
+
+        # Notional bazlı beklenti: pozisyon büyüklüğünden bağımsız tek ölçü.
+        # Baraj genişliği değişince dolar EV küçülür (daha küçük notional), bps
+        # sabit kalır; V6.4 kapısı bu birimde tanımlıdır.
+        notionaller = [t["notional"] for t in trades if t.get("notional")]
+        if notionaller:
+            bps = sum(t["pnl"] for t in trades if t.get("notional")) / sum(notionaller) * 10000
+            satirlar.append(
+                f"📐 Beklenti (notional): {bps:+.1f} bps/işlem — n={len(notionaller)}"
+            )
 
         sebep_pnl = {}
         sebep_adet = {}

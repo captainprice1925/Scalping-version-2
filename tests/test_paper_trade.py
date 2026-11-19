@@ -474,6 +474,36 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertAlmostEqual(gen["tp3"], 100.0 - 2 * config.TP_ATR, places=9)
         self.assertAlmostEqual(gen["sl_mesafe"], 2 * config.SL_ATR, places=9)
 
+    def test_istatistik_notional_bps(self):
+        """V6.4 kapısı bps biriminde: /istatistik notional bazlı beklentiyi gösterir."""
+        trade = PaperTrade()
+        self.assertTrue(trade.islem_ac("TESTUSDT", "SHORT", 100.0, 1.0, 4))
+        poz = trade.pozisyonlar[0]
+        trade.pozisyon_kapat(poz, poz["tp1"], 100, "TP1")
+        rapor = trade.istatistik()
+        self.assertIn("bps/işlem", rapor)
+        self.assertIn("n=1", rapor)
+
+        # notional alanı olmayan eski kayıtlar: satır eklenmez, hata da vermez
+        eski = PaperTrade()
+        eski.islem_gecmisi = [
+            {
+                "symbol": "XUSDT",
+                "direction": "SHORT",
+                "entry": 1.0,
+                "exit": 0.9,
+                "yuzde": 100,
+                "sebep": "TP1",
+                "skor": 4,
+                "brut_pnl": 1.0,
+                "komisyon": 0.1,
+                "pnl": 0.9,
+                "giris_zamani": None,
+                "zaman": "2026-01-01T00:00:00",
+            }
+        ]
+        self.assertNotIn("bps/işlem", eski.istatistik())
+
     def test_wsgi_starts_the_single_bot_thread_entrypoint(self):
         try:
             import flask  # noqa: F401

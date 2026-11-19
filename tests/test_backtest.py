@@ -20,6 +20,7 @@ from backtest.motor import Motor, boyutlandir, ozet
 from backtest.simule import (
     filtersiz_cfg,
     filtreli_skor,
+    genis_cfg,
     islem_simule,
     v62_cfg,
     varsayilan_cfg,
@@ -137,6 +138,49 @@ class BoyutlandirmaPariteTestleri(unittest.TestCase):
         pt = PaperTrade()
         self.assertTrue(pt.islem_ac("TESTUSDT", "LONG", 100.0, 1.0, 4))
         self._karsilastir(pt, "SHORT", 50.0, 0.6)
+
+
+class BarajGenisletmeTestleri(unittest.TestCase):
+    def test_barajlar_ve_zaman_olcekli(self):
+        temel = varsayilan_cfg()
+        iki = genis_cfg(2.0)
+        for anahtar in ("SL_ATR", "BE_ATR", "TP_ATR"):
+            self.assertAlmostEqual(iki[anahtar], temel[anahtar] * 2, places=9)
+        self.assertEqual(temel["ZAMAN_EXIT_SAAT"] * 2, iki["ZAMAN_EXIT_SAAT"])
+        # Taban cfg değişmemeli (kopya üzerinde çalışır)
+        self.assertAlmostEqual(temel["SL_ATR"], config.SL_ATR, places=9)
+
+    def test_seviyeler_genisliyor(self):
+        from backtest.simule import seviyeler
+
+        temel = varsayilan_cfg()
+        iki = genis_cfg(2.0)
+        a = seviyeler(100.0, "SHORT", 1.0, temel)
+        b = seviyeler(100.0, "SHORT", 1.0, iki)
+        self.assertAlmostEqual(b["sl"] - 100.0, (a["sl"] - 100.0) * 2, places=9)
+        self.assertAlmostEqual(100.0 - b["tp1"], (100.0 - a["tp1"]) * 2, places=9)
+        # tp2/tp3 de aynı oranda
+        self.assertAlmostEqual(100.0 - b["tp2"], (100.0 - a["tp2"]) * 2, places=9)
+        self.assertAlmostEqual(100.0 - b["tp3"], (100.0 - a["tp3"]) * 2, places=9)
+
+    def test_genis_baraj_ayni_barda_daha_az_cakisma(self):
+        """Baraj genişledikçe SL ve TP1'in aynı 1h barında çakışma olasılığı düşer."""
+        from backtest.simule import seviyeler
+
+        df = pd.DataFrame(
+            [
+                [None, 100, 100.5, 99.5, 100, 1],
+                [None, 100, 102.0, 98.0, 100, 1],
+            ],
+            columns=["time", "open", "high", "low", "close", "volume"],
+        ).assign(time=lambda d: pd.date_range("2026-01-01", periods=len(d), freq="1h"))
+        dar = islem_simule(df, 0, "SHORT", 1.0, varsayilan_cfg())
+        gen = islem_simule(df, 0, "SHORT", 1.0, genis_cfg(2.0))
+        # Dar baraj: SL 101.5 ve TP1 98.8 aynı barda; motor kötümser olarak SL seçer.
+        self.assertEqual("STOP", dar["ilk_sebep"])
+        # Geniş baraj: SL 103.0 ve TP1 97.6; 98-102 aralığında hiçbiri dokunulmaz.
+        self.assertEqual(["VERI_SONU"], gen["sebepler"])
+        self.assertFalse(gen["tp1_gordu"])
 
 
 class BariyerTestleri(unittest.TestCase):

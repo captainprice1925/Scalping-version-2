@@ -169,6 +169,43 @@ histerezisli kurtarma modunun gerekçesidir.
 Bu araç V6.3 canlı doğrulamasını etkilemez; karar mantığında hiçbir değişiklik
 yapılmadı.
 
+### Baraj genişletme bulgusu (19.11.2026)
+
+Sinyal analizinin işaret ettiği darboğaz maliyetti: tur başına ~16 bps, brüt kenar
+~1.6 bps. Tur maliyeti baraj mesafesinden **bağımsız sabittir**; 1.2 ATR'lik TP1
+çok yakın olduğu için maliyet hedefin büyük kısmını yiyor. Hipotez: TP/SL
+mesafelerini ATR cinsinden aynı oranda genişletmek, maliyetin payını düşürür.
+
+`backtest/simule.genis_cfg(oran)` TP/SL'i `oran` katına çıkarır ve `ZAMAN_EXIT_SAAT`
+de aynı oranda ölçekler (aksi halde geniş barajlar zaman çıkışına takılır).
+
+**Ana evren (15 sembol, 10 ay, taker):**
+
+| Baraj | İşlem | EV | WR | İlk yarı | Son yarı | Max DD | Son bakiye |
+|---|---|---|---|---|---|---|---|
+| 1.0× (canlı) | 299 | −7.1 bps | %54.8 | −9.4 | −3.8 | %24.5 | $78.73 |
+| 2.0× | 200 | **+10.7 bps** | %59.5 | +8.7 | +12.8 | %12.1 | $105.87 |
+| 2.5× | 139 | +7.5 bps | %59.7 | +5.3 | +9.6 | %11.5 | $103.36 |
+| 3.0× | 92 | +32.7 bps | %62.0 | +39.0 | +26.2 | %7.5 | $109.32 |
+| 3.5× | 40 | +10.8 bps | %57.5 | +5.4 | +17.5 | %4.3 | $100.97 |
+
+**Dış örneklem (hiç kullanılmamış 8 sembol, aynı dönem):** 1.0× +3.0, 2.0× +5.8,
+2.5× +45.2, 3.0× +68.1 bps. Yön ana evrenle aynı: genişletme EV'yi artırıyor.
+(2.0× dış örneklemde yarı-örneklemde tutarsız: +39.7 / −39.2.)
+
+**Stres:** 2.0× çift kayma ile +4.7 bps (hâlâ pozitif), 2.5× çift kaymada −11.0
+bps. Maker girişte 2.0× +16.6 bps.
+
+**Sınırlar:** örneklem küçük (92-200 işlem), çeyrek bazında tutarsızlık var
+(ana evren 3.0×: Q3 −57 bps), sonuç sembol evrenine duyarlı, 1h barı doldurma
+iyimser değil ama kesin de değil. Fonlama modellenmiyor; canlı kayıtta SHORT
+tarafı fonlamadan **kazandı** (+$0.113 / 41 işlem), yani gizli maliyet değil.
+
+**Karar:** 2.0× en sağlam nokta (en çok işlem, iki yarıda pozitif, kayma stresine
+dayanıklı). Ancak bu canlı bir kural değişikliğidir ve V6.3 doğrulaması sürerken
+uygulanmadı. V6.3 kapısı kapandıktan sonra V6.4 olarak, tek değişiklik kuralıyla
+uygulanabilir.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

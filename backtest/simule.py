@@ -103,6 +103,23 @@ def eski_dd_cfg():
     return cfg
 
 
+def genis_cfg(oran=2.0, taban=None):
+    """TP/SL mesafelerini ATR cinsinden `oran` katına çıkarır (baraj genişletme).
+
+    Gerekçe: tur maliyeti (~16 bps) baraj mesafesinden bağımsız sabittir; çok
+    dar barajlarda maliyet hedefin büyük kısmını yer. Bu varyant sadece
+    karşılaştırma içindir, canlı kural değildir.
+
+    `ZAMAN_EXIT_SAAT` de aynı oranda ölçeklenir; aksi halde geniş barajlar
+    zaman çıkışına takılıp elma-armut karşılaştırması olur.
+    """
+    cfg = (taban or varsayilan_cfg()).copy()
+    for anahtar in ("SL_ATR", "BE_ATR", "TP_ATR"):
+        cfg[anahtar] = cfg[anahtar] * oran
+    cfg["ZAMAN_EXIT_SAAT"] = max(1, int(round(cfg["ZAMAN_EXIT_SAAT"] * oran)))
+    return cfg
+
+
 def filtreli_skor(trend_long, ema_dist, volume_ratio, rsi, atr_pct, cfg):
     """faz2_sinyal.calculate_score_fatih ile birebir aynı mantık (parite testi var)."""
     if ema_dist < cfg["MIN_EMA_DIST"]:

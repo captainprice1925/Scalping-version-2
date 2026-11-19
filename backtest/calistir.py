@@ -4,8 +4,11 @@
 Kullanım:
     python -m backtest.calistir indir          # 15 sembol, ~345 gün 1h veri
     python -m backtest.calistir analiz         # sinyal + gösterge analizi
-    python -m backtest.calistir motor [cfg]    # portföy simülasyonu (v63|v62|filtresiz)
+    python -m backtest.calistir motor [cfg]    # portföy simülasyonu
     python -m backtest.calistir hepsi          # üçü birden
+
+`cfg` seçenekleri: v63 (canlı), v62, filtresiz, atr_only, maker, maker_atr,
+eski_dd (V6.3.2 öncesi kalıcı kilit), genis20/genis25/genis30 (baraj genişletme).
 
 Canlı botu etkilemez; ayrı bir araçtır. Sonuçlar `backtest/sonuclar/` altına
 CSV olarak yazılır (git'e girmez).
@@ -23,7 +26,15 @@ from backtest.analiz import (
     sinyal_taramasi,
 )
 from backtest.motor import Motor, ozet
-from backtest.simule import filtersiz_cfg, v62_cfg, varsayilan_cfg
+from backtest.simule import (
+    atr_only_cfg,
+    eski_dd_cfg,
+    filtersiz_cfg,
+    genis_cfg,
+    maker_cfg,
+    v62_cfg,
+    varsayilan_cfg,
+)
 from backtest.veri import indir
 
 SEMBOLLER = [
@@ -40,6 +51,13 @@ CFG_SECENEK = {
     "v63": varsayilan_cfg,
     "v62": v62_cfg,
     "filtresiz": filtersiz_cfg,
+    "atr_only": atr_only_cfg,
+    "maker": maker_cfg,
+    "maker_atr": lambda: maker_cfg(atr_only_cfg()),
+    "eski_dd": eski_dd_cfg,
+    "genis20": lambda: genis_cfg(2.0),
+    "genis25": lambda: genis_cfg(2.5),
+    "genis30": lambda: genis_cfg(3.0),
 }
 
 

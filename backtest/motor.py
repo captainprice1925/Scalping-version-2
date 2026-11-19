@@ -246,6 +246,7 @@ class Motor:
                 "sebep": sebep,
                 "skor": poz["skor"],
                 "atr_pct": poz["gosterge_an"]["atr_pct"],
+                "notional": poz["notional"],
                 "brut_pnl": brut,
                 "komisyon": giris_payi + cikis_komisyonu,
                 "pnl": net,
@@ -476,6 +477,7 @@ class Motor:
                         kapanan.append(sembol)
 
             self.peak = max(self.peak, self._efektif())
+            dd_modu = self._dd_durumu()
 
             # Girişler: aynı barın kapanışından, çıkışlardan sonra.
             if bitis is None or t <= bitis:
@@ -497,6 +499,7 @@ class Motor:
                     "efektif": self._efektif(),
                     "peak": self.peak,
                     "acik": len(self.pozisyonlar),
+                    "dd_modu": dd_modu,
                 }
             )
 

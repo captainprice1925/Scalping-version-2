@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V6.2 giriş rejimi filtresi testleri (calculate_score_fatih sert eleme)."""
+"""V6.2 + V6.3 giriş rejimi filtresi testleri (calculate_score_fatih sert eleme)."""
 import sys
 import unittest
 from pathlib import Path
@@ -22,13 +22,14 @@ def _df_4h(kapanis, ema_200, n=210):
     )
 
 
-def _df_1h(kapanis, ema_21, rsi, volume_ratio, n=60):
+def _df_1h(kapanis, ema_21, rsi, volume_ratio, atr_pct=1.0, n=60):
     return pd.DataFrame(
         {
             "close": [kapanis] * n,
             "ema_21": [ema_21] * n,
             "rsi": [rsi] * n,
             "volume_ratio": [volume_ratio] * n,
+            "atr_pct": [atr_pct] * n,
         }
     )
 
@@ -73,6 +74,36 @@ class GirisRejimiFiltreTests(unittest.TestCase):
         skor, yon = calculate_score_fatih(df_4h, df_1h)
         self.assertEqual(3, skor)
         self.assertIsNone(yon)
+
+    # --- V6.3 volatilite bandı ---
+
+    def test_atr_cok_yuksek_giris_eleme(self):
+        # Her şey uygun ama ATR% 1.8 > 1.3 (çalkantılı piyasa, geç kalmış giriş)
+        df_4h = _df_4h(kapanis=100.0, ema_200=110.0)
+        df_1h = _df_1h(kapanis=100.0, ema_21=100.5, rsi=42.0,
+                       volume_ratio=1.5, atr_pct=1.8)
+        skor, yon = calculate_score_fatih(df_4h, df_1h)
+        self.assertEqual(0, skor)
+        self.assertIsNone(yon)
+
+    def test_atr_cok_dusuk_giris_eleme(self):
+        # ATR% 0.5 < 0.7 (durgun piyasa, TP'ye ulaşacak hareket yok)
+        df_4h = _df_4h(kapanis=100.0, ema_200=110.0)
+        df_1h = _df_1h(kapanis=100.0, ema_21=100.5, rsi=42.0,
+                       volume_ratio=1.5, atr_pct=0.5)
+        skor, yon = calculate_score_fatih(df_4h, df_1h)
+        self.assertEqual(0, skor)
+        self.assertIsNone(yon)
+
+    def test_atr_bant_sinirlari_gecer(self):
+        # Bant sınırları dahil (0.7 ve 1.3) girişe izin verir
+        for atr in (0.7, 1.0, 1.3):
+            df_4h = _df_4h(kapanis=100.0, ema_200=110.0)
+            df_1h = _df_1h(kapanis=100.0, ema_21=100.5, rsi=42.0,
+                           volume_ratio=1.5, atr_pct=atr)
+            skor, yon = calculate_score_fatih(df_4h, df_1h)
+            self.assertEqual(4, skor, f"ATR={atr} band içinde geçmeli")
+            self.assertEqual("SHORT", yon)
 
 
 if __name__ == "__main__":

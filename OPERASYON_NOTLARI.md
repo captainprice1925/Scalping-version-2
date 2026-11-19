@@ -71,6 +71,25 @@ Alınan önlemler (hepsi `config.py`'den yönetilir):
 
 Bilinen sınırlar: 40/41 işlem SHORT olduğundan long tarafı hâlâ sınanmadı; n=8 küçük örneklem, hipotez güçlü ama kesinleşmedi.
 
+## V6.3 — Volatilite bandı (19.11.2026)
+
+V6.2 doğrulama kapısı ilk kontrolde (n=24) geçemedi: EV −$0.020 (hedef ≥ +$0.15), WR %58.3 (hedef ≥ %65), drawdown %7.5 (kapı %10). Yarı-örneklem bozuluyor: ilk 12 EV +$0.103 → son 12 EV −$0.144. V6.2 zararı azalttı (önceki −$0.092) ama hedefe taşımadı.
+
+24 işlemlik veride tek yarı-örneklem tutarlı ayırıcı ATR oldu:
+
+| Giriş anı 1h ATR% | n | WR | EV/işlem | İlk 12 EV | Son 12 EV |
+|---|---|---|---|---|---|
+| ≤ 1.3 | 15 | %73 | **+$0.225** | +$0.24 | +$0.20 |
+| > 1.3 | 9 | %33 | **−$0.429** | −$0.18 | −$0.63 |
+
+Bant (0.7–1.3] simülasyonu: n=12, WR %75, EV +$0.286 (ilk yarı +$0.40 / son yarı +$0.20). Alt sınır 0.7'nin kanıtı 41 işlemlik turdan (ATR ≤ 0.7 grubu EV −$0.179, n=29). Eşik jilet değil: 1.2 ve 1.3 eşikleri aynı sonucu veriyor. Mekanizma: giriş anında ATR yüksekse hareet zaten olmuş, geç kalınmış giriş → STOP; ATR çok düşükse TP'ye ulaşacak hareket yok.
+
+`faz2_sinyal.calculate_score_fatih` içinde V6.2 kontrollerinden sonra sert eleme (`MIN_ATR_PCT`, `MAX_ATR_PCT`). Beklenen işlem sıklığı ~%50 düşer (~0.9/gün). Doğrulama: sonraki ~40 işlemde bant-içi grubun EV'si >0 kalmalı; aksi halde iki config değeriyle geri alınır.
+
+Reddedilen adaylar (bu turda sağlanmadı): ema200 yorgunluğu (≤ −20) yarı-örneklemde tutmadı; RSI ≤ 45 hipotezi tersine döndü (>50 iyi çıktı) — RSI eşiği gürültü, uygulanmadı. İzlemede: aynı sembole anında tekrar giriş (2/2 kayıp, örneklem çok küçük).
+
+Bilinen sınırlar: 24/24 işlem SHORT; long tarafı hâlâ sınanmadı; ATR üst sınırı n=9'luk kayıp grubundan geldi (yarı-örneklem desteğiyle).
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

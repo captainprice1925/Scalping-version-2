@@ -22,6 +22,14 @@ def calculate_score_fatih(df_4h, df_1h):
     if last_1h['volume_ratio'] > config.MAX_VOL_RATIO:
         return 0, None
 
+    # V6.3 volatilite bandı: giriş anındaki 1h ATR% çok düşük veya çok yüksekse
+    # ele. Kanıt: 24 işlemlik V6.2 verisinde ATR > 1.3 grubu EV -$0.429,
+    # <= 1.3 grubu +$0.225; her iki yarı-örneklemde de aynı yön. 41 işlemlik
+    # turda da düşük ATR (< 0.7) negatifti.
+    atr_pct = last_1h['atr_pct']
+    if atr_pct < config.MIN_ATR_PCT or atr_pct > config.MAX_ATR_PCT:
+        return 0, None
+
     score = 0
     yon = None
 

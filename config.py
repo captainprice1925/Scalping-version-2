@@ -51,6 +51,16 @@ MIN_SKOR = 4
 MIN_EMA_DIST = 0.45    # minimum mutlak EMA21 mesafesi (%)
 MAX_VOL_RATIO = 1.8    # hacim patlaması üst sınırı
 
+# V6.3 - VOLATİLİTE BANDI (24 işlemlik V6.2 doğrulama verisi; her iki yarı-örneklemde
+# de tutarlı, yön 41 işlemlik turda da aynıydı):
+#   ATR > 1.3  -> n=9, WR %33, EV -$0.429 (giriş anında hareket zaten olmuş,
+#                 geç kalınmış giriş → STOP)
+#   ATR <= 1.3 -> n=15, WR %73, EV +$0.225 (kapı geçer: hedef +$0.15)
+#   ATR <= 0.7 -> 41 işlemlik turda EV -$0.179 (hareket yok → TP'ye ulaşılamıyor)
+#   Bant içindeki simülasyon: EV +$0.286, WR %75 (ilk yarı EV+0.40 / son yarı EV+0.20)
+MIN_ATR_PCT = 0.7      # minimum 1h ATR% (durgun piyasa girişi yasak)
+MAX_ATR_PCT = 1.3      # maksimum 1h ATR% (çalkantılı piyasa girişi yasak)
+
 # V6.1: BTC 4h rejimi, BTC dışı coinlerin yönünü filtreler. Tüm piyasa aynı
 # anda tek yöne sinyal verdiğinde korele kayıp riski düşer.
 BTC_REGIME_FILTRE = True
@@ -77,4 +87,4 @@ TARAMA_ARALIGI = 300
 COOLDOWN_DAKIKA = 240
 COOLDOWN_BE_DAKIKA = 45
 
-print("✅ Config V6.2 - %1 risk + hacim onaylı sinyal (4/4) + BTC rejim + giriş rejimi filtresi (ema/vol)")
+print("✅ Config V6.3 - %1 risk + hacim onaylı sinyal (4/4) + BTC rejim + giriş rejimi filtresi (ema/vol/atr bandı)")

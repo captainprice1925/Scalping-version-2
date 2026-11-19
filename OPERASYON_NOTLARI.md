@@ -90,6 +90,10 @@ Reddedilen adaylar (bu turda sağlanmadı): ema200 yorgunluğu (≤ −20) yarı
 
 Bilinen sınırlar: 24/24 işlem SHORT; long tarafı hâlâ sınanmadı; ATR üst sınırı n=9'luk kayıp grubundan geldi (yarı-örneklem desteğiyle).
 
+## V6.3.1 — Giriş zamanı kaydı (19.11.2026)
+
+Davranış değişikliği yoktur (filtre/karar mantığı aynı): `pozisyon_kapat` çıkış kayıtlarına `giris_zamani` alanı eklenir ve `/istatistik` kazanan / kaybeden / STOP işlemlerinin ortalama tutma süresini saat cinsinden gösterir. Amaç: saf STOP'ların ne kadar sürdüğünü ölçmek ve "ilerlemeyen işlemden erken çık" (zaman-stop) hipotezini kanıta dayalı test edebilmek. Bu sürümden önce açılmış işlemlerde alan yoktur; ortalamaya girmez. Doğrulama verisini bulandırmaz, sadece kayıt ekler.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

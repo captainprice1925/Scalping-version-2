@@ -353,6 +353,54 @@ class PaperTradeRiskTests(unittest.TestCase):
         self.assertIn("45", metin)
         self.assertIn("60", metin)
 
+    def test_giris_zamani_historye_tasinir(self):
+        trade = PaperTrade()
+        self.assertTrue(trade.islem_ac("TESTUSDT", "LONG", 100.0, 1.0, 3, self.frame))
+        giris = trade.pozisyonlar[0]["acilis_zamani"]
+        self.assertTrue(giris)
+
+        trade.pozisyon_guncelle("TESTUSDT", 100.0, 103.0, 100.0, 102.7)
+        self.assertEqual([], trade.pozisyonlar)
+        self.assertTrue(trade.islem_gecmisi)
+        self.assertTrue(
+            all(k.get("giris_zamani") == giris for k in trade.islem_gecmisi)
+        )
+
+    def test_istatistik_tutma_suresi_gosterir(self):
+        trade = PaperTrade()
+        trade.islem_gecmisi = [
+            {
+                "poz_id": "win",
+                "symbol": "WINUSDT",
+                "direction": "LONG",
+                "entry": 100.0,
+                "sebep": "TP3",
+                "skor": 4,
+                "komisyon": 0.1,
+                "pnl": 1.0,
+                "giris_zamani": "2026-01-01T00:00:00",
+                "zaman": "2026-01-01T04:00:00",
+            },
+            {
+                "poz_id": "lose",
+                "symbol": "LOSEUSDT",
+                "direction": "SHORT",
+                "entry": 100.0,
+                "sebep": "STOP",
+                "skor": 4,
+                "komisyon": 0.1,
+                "pnl": -1.0,
+                "giris_zamani": "2026-01-02T00:00:00",
+                "zaman": "2026-01-03T02:00:00",
+            },
+        ]
+
+        metin = trade.istatistik()
+        self.assertIn("tutma süresi", metin)
+        self.assertIn("kazanan 4.0", metin)
+        self.assertIn("kaybeden 26.0", metin)
+        self.assertIn("STOP 26.0", metin)
+
     def test_macd_histogram_calculated_in_full_analysis(self):
         from faz1_engine import full_analysis
 

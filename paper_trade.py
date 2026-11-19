@@ -628,6 +628,7 @@ class PaperTrade:
                 "brut_pnl": brut_pnl,
                 "komisyon": giris_komisyon_payi + cikis_komisyonu,
                 "pnl": net_pnl,
+                "giris_zamani": pozisyon.get("acilis_zamani"),
                 "zaman": datetime.now().isoformat(),
             }
         )
@@ -685,6 +686,11 @@ class PaperTrade:
                     (k.get("gosterge_an") for k in kayitlar if k.get("gosterge_an")),
                     None,
                 ),
+                "giris_zamani": next(
+                    (k.get("giris_zamani") for k in kayitlar if k.get("giris_zamani")),
+                    None,
+                ),
+                "zaman": max(k["zaman"] for k in kayitlar),
             }
             gruplar[anahtar] = sonuclar
 
@@ -725,6 +731,7 @@ class PaperTrade:
         # kaybeden işlem gruplarının ortalamasıyla karşılaştırır. Amaç hangi
         # göstergenin (varsa) sonuç ayrıştırıcı olduğunu kanıta dayalı görmektir.
         satirlar.extend(self._gosterge_karsilastirma(trades))
+        satirlar.extend(self._sure_karsilastirma(trades))
 
         sembol_pnl = {}
         for t in trades:
@@ -776,6 +783,44 @@ class PaperTrade:
                 continue
             satirlar.append(f"  {anahtar}: {w:.3g} | {l:.3g}")
         return satirlar if len(satirlar) > 1 else []
+
+    def _sure_karsilastirma(self, trades):
+        """Kazanan/kaybeden ve STOP işlemlerinin ortalama tutma süresini gösterir.
+
+        Giriş zamanı (giris_zamani) sadece bu sürümden sonra açılan pozisyonlarda
+        kayıtlıdır; eski işlemlerde boş kalır ve ortalamaya girmez. Kayıt amaçlıdır,
+        karar vermez. "İlerlemeyen işlemden erken çık" (zaman-stop) hipotezini
+        test edebilmek için gereken veridir.
+        """
+        def saat(t):
+            giris, cikis = t.get("giris_zamani"), t.get("zaman")
+            if not giris or not cikis:
+                return None
+            try:
+                fark = datetime.fromisoformat(cikis) - datetime.fromisoformat(giris)
+            except (ValueError, TypeError):
+                return None
+            if fark.total_seconds() < 0:
+                return None
+            return fark.total_seconds() / 3600
+
+        kazanan = [s for s in (saat(t) for t in trades if t["pnl"] > 0) if s is not None]
+        kaybeden = [s for s in (saat(t) for t in trades if t["pnl"] <= 0) if s is not None]
+        if not kazanan or not kaybeden:
+            return []
+        stoplar = [
+            s
+            for s in (saat(t) for t in trades if "STOP" in t["sebepler"])
+            if s is not None
+        ]
+        satir = (
+            "⏱️ Ortalama tutma süresi (saat): "
+            f"kazanan {sum(kazanan) / len(kazanan):.1f} | "
+            f"kaybeden {sum(kaybeden) / len(kaybeden):.1f}"
+        )
+        if stoplar:
+            satir += f" | STOP {sum(stoplar) / len(stoplar):.1f}"
+        return [satir]
 
     def rapor(self):
         print("\n" + "=" * 60 + "\n📊 PAPER TRADE V6 RAPORU\n" + "=" * 60)

@@ -94,6 +94,54 @@ Bilinen sınırlar: 24/24 işlem SHORT; long tarafı hâlâ sınanmadı; ATR üs
 
 Davranış değişikliği yoktur (filtre/karar mantığı aynı): `pozisyon_kapat` çıkış kayıtlarına `giris_zamani` alanı eklenir ve `/istatistik` kazanan / kaybeden / STOP işlemlerinin ortalama tutma süresini saat cinsinden gösterir. Amaç: saf STOP'ların ne kadar sürdüğünü ölçmek ve "ilerlemeyen işlemden erken çık" (zaman-stop) hipotezini kanıta dayalı test edebilmek. Bu sürümden önce açılmış işlemlerde alan yoktur; ortalamaya girmez. Doğrulama verisini bulandırmaz, sadece kayıt ekler.
 
+## Backtest aracı ve 10 aylık bulgular (19.11.2026)
+
+Canlı botu etkilemeyen ayrı bir araç `backtest/` altına eklendi (hiçbir canlı
+modül bu paketi import etmez):
+
+- `python -m backtest.calistir indir` — Binance USDT-M 1h, 15 sembol, 345 gün
+- `python -m backtest.calistir analiz` — sinyal seviyesinde filtre/gösterge analizi
+- `python -m backtest.calistir motor v63|v62|filtresiz` — portföy simülasyonu
+- Veri (`backtest/veri/`) ve sonuçlar (`backtest/sonuclar/`) git'e girmez.
+
+Motor `paper_trade.py` kurallarının 1h aynasıdır: giriş kayması + taker komisyon,
+%1/%2 risk boyutlandırması, SL 1.5 / TP 1.2-1.89-2.7 ATR, TP1 %40 + BE, TP2 %30,
+aynı barda SL önce (kötümser), STOP 240 dk / BE 45 dk cooldown, günlük %3 kayıp,
+%20 max drawdown. Fonlama ve spread modellenmez.
+
+**10 ay (2026-01-18 → 11-19, 15 sembol):**
+
+| Konfig | İşlem | EV/işlem | WR | Max DD |
+|---|---|---|---|---|
+| Filtresiz | 144 | −$0.118 | %50.7 | %20.5 |
+| V6.2 | 157 | −$0.097 | %54.1 | %20.8 |
+| V6.3 | 228 | −$0.081 | %55.3 | %20.2 |
+
+İşlem sayıları yol bağımlıdır (erken DD kilidi daha az işlem üretir); asıl ölçü
+EV/işlemdir. Hiçbir konfig pozitif değil; V6.3 en az kaybettiren, ama kapı hedefi
+(+$0.15) hâlâ uzak.
+
+**Sinyal seviyesi (6.132 filtresiz 4/4 sinyal):** TP1 isabeti %55.7, rastgele
+beklenti %55.6 → skor sistemi yön kenarı üretmiyor. Tur maliyeti 16 bps
+(%0,05 giriş + %0,05 çıkış + %0,03×2 kayma); brüt kenar yalnızca ~+1.6 bps
+(V6.3'te ~+7 bps). **Darboğaz indikatör değil, maliyet.**
+
+**Gösterge ayrımı (tutarlı olanlar):** ATR > 1.6 en toksik bölge (−54 bps, her
+iki yarıda negatif; V6.3 üst sınırı doğru yönde). ATR 0.7–1.3 tek başına pozitif
+değil (−14 bps). En tutarlı ayrım MACD: SHORT'ta MACD histogramı > 0 (ters
+momentum) −6.6 bps, < −0.2 ise −30 bps. ATR<1.3 + SHORT MACD>0 birlikte −7.7 bps
+(ilk yarı −9.1 / son yarı −5.9) — hâlâ maliyetin altında. Hiçbir gösterge tek
+başına pozitif EV üretmiyor.
+
+**Operasyonel bulgu:** %20 max drawdown kuralı kalıcı kilit yaratıyor. Simülasyonda
+Temmuz'da eşik aşıldı; açık pozisyon kalmadığı için efektif bakiye toparlanamadı
+ve son 4 ay hiç işlem açılmadı. Canlıda da aynı durum yaşanır: kilit, bakiye
+yükselmeden açılmaz, bakiye de işlem olmadan yükselmez. Bu kuralın bir toparlanma
+mekanizmasına (ör. %15'te yarım boyutla devam) ihtiyacı var.
+
+Bu araç V6.3 canlı doğrulamasını etkilemez; karar mantığında hiçbir değişiklik
+yapılmadı.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.

@@ -4,3 +4,7 @@ __pycache__/
 .env
 scalp_bot_state.json
 .DS_Store
+
+# Backtest çıktıları — veri ve sonuçlar repoya girmez
+backtest/veri/
+backtest/sonuclar/

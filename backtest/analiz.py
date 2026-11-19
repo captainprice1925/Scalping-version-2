@@ -64,9 +64,7 @@ def sinyal_taramasi(veriler, cfg=None, baslangic=None, bitis=None, ilerleme=Fals
     """Tüm sembollerin 1h barlarında 4/4 sinyalleri tarar ve yarıştırır."""
     cfg = cfg or varsayilan_cfg()
     btc_harita = (
-        rejim_haritasi(hazirla(veriler["BTCUSDT"]), veriler["BTCUSDT"])
-        if "BTCUSDT" in veriler
-        else {}
+        rejim_haritasi(veriler["BTCUSDT"]) if "BTCUSDT" in veriler else {}
     )
     kayitlar = []
     for sembol, df in veriler.items():

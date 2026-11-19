@@ -45,10 +45,8 @@ def hazirla(df_1h, df_4h=None):
     return {"1h": df1, "4h": df4, "idx4": idx4}
 
 
-def rejim_haritasi(s, btc_df_1h=None):
+def rejim_haritasi(btc_df_1h):
     """1h zaman damgası -> BTC 4h rejimi (close > ema200)."""
-    if btc_df_1h is None:
-        return {}
     b = hazirla(btc_df_1h)
     harita = {}
     for i, t in enumerate(b["1h"]["time"]):
@@ -161,7 +159,9 @@ class Motor:
         """veriler: {sembol: 1h DataFrame(time/open/high/low/close/volume)}"""
         self.cfg = cfg or varsayilan_cfg()
         self.s = {sembol: hazirla(df) for sembol, df in veriler.items()}
-        self.btc = rejim_haritasi(self.s["BTCUSDT"], veriler["BTCUSDT"]) if "BTCUSDT" in self.s else {}
+        self.btc = (
+            rejim_haritasi(veriler["BTCUSDT"]) if "BTCUSDT" in self.s else {}
+        )
 
         self.bakiye = self.cfg["BUTCE_SANAL"]
         self.peak = self.cfg["BUTCE_SANAL"]

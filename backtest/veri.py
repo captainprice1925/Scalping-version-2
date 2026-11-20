@@ -56,6 +56,10 @@ def indir_binance(symbol, timeframe="1h", gun=300):
         columns=["time", "open", "high", "low", "close", "volume"],
     )
     df["time"] = pd.to_datetime(df["time"], unit="ms")
+    # Binance kline alanlarını string döndürür; sayıya çevrilmezse panel
+    # karşılaştırmaları (np.isfinite, bölme) sessizce yanlış sonuç verir.
+    for kolon in ("open", "high", "low", "close", "volume"):
+        df[kolon] = pd.to_numeric(df[kolon], errors="coerce")
     return df.drop_duplicates("time").sort_values("time").reset_index(drop=True)
 
 

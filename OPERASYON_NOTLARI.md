@@ -259,6 +259,41 @@ Komut dinleyicisi Telegram `getUpdates` ile çalışır; bot hesabında webhook 
 
 Gerçek para aşamasına geçmeden önce Gate hesabındaki ücret tablosunu girin, en az 30 gün paper sonuçlarını izleyin, her sembolün kontrat çarpanını ve minimum emir büyüklüğünü doğrulayın, fonlama tahakkuklarını hesap ekstresiyle karşılaştırın ve ayrı bir gerçek-emir adaptörüne kill-switch ile günlük kayıp sınırı ekleyin; borsadaki kaldıraç ve risk limiti ayarlarını 10× ile eşleştirin.
 
+## Kesitsel momentum araştırması — kapandı (canlıya alınmıyor)
+
+Amaç: tek coinin yönünü tahmin etmek yerine sepet içinde **göreli** gücü işlemek.
+Her dengelemede son `geri_bak` barın getirisine göre en güçlü N coin LONG, en zayıf
+N coin SHORT; dolar-nötr; sinyal kapanışta hesaplanır, giriş sonraki barın
+açılışında (ileriye bakış yok); fonlama modellenmez.
+
+Araç: `backtest/kesitsel.py` + `python -m backtest.calistir kesitsel`.
+Veri: 23 sembol, 4h, 2022-11-25 → 2026-11-19 (8.761 bar, `backtest/veri_uzun/`).
+
+**Neden kapandı — ölçümler:**
+
+- Tek yıllık dilimde (2025-11→2026-11) en iyi hücre +%98 görünüyordu. 4 yıla
+  çıkınca kayboldu: aynı hücrenin 4 yıllık faz medyanı +%20, DD %52.
+- **Faz medyanı** esastır: canlıda giriş zamanını sen seçmiyorsun, ızgara `tut`
+  adımıyla ilerlediği için en fazla `tut` kadar benzersiz faz var. 24 fazın
+  14'ü pozitif, en kötü −%50, en iyi +%271. Bu yayılım kenarın zayıf olduğunun
+  kanıtı: 4 saatlik kayma sonucu 7 katına çıkarabiliyor.
+- Yıl yıl medyan: 2022-23 −%17.4 · 2023-24 +%21.4 · 2024-25 −%9.6 · 2025-26 +%49.2.
+  Dört yılın ikisi negatif; bileşik medyan ≈ +%4.7/yıl.
+- Parametre komşuluğu uçurum: g12/t24 +%46 iken g42/t24 −%47, g6/t12 −%61.
+  Dar bir ada, etrafı çukur → uydurulmuş gürültü işareti.
+- Kâr iki coine bağlı: WLD +%62, ZEC +%55; ikisi çıkarılınca geriye ≈0 kalıyor.
+- IC testi (sıralamanın gelecek getiriyi bilme gücü): 28 kombinasyondan yalnızca
+  1'i |t|>2; seçilen konfigin IC'si t=0.66.
+- Kaldıraç medyanı **düşürüyor**: 1× +%20 → 2× −%10 → 3× −%60 (oynaklık sürüklenmesi).
+
+**10× hedefi:** 5× brütte bile P(10×/10 ay) ≈ %7, P(yarısını kaybetme) ≈ %19
+(faz dağılımı) veya %51 (işlem bootstrap'ı). Yani 10× ancak kumar olarak alınır.
+
+Yan bulgu (düzeltildi): `backtest/veri.py` Binance kline alanlarını string olarak
+kaydediyordu; 4 yıllık indirmede panel `object` dtype'a düşüp karşılaştırmaları
+bozuyordu. `indir_binance` artık OHLCV'yi sayıya çeviriyor, `panel` de `float`'a
+zorluyor.
+
 ## References
 
 [1]: https://www.gate.com/help/futures/futures_logic/22079 "Futures Trading Fee Calculation | Gate"

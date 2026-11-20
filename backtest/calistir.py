@@ -16,6 +16,7 @@ CSV olarak yazılır (git'e girmez).
 import argparse
 import os
 
+import numpy as np
 import pandas as pd
 
 from backtest.analiz import (
@@ -45,6 +46,12 @@ SEMBOLLER = [
 
 GUN = 345          # 345 gün indir; ~40 gün ısınma, ~300 gün simülasyon
 ISINMA_GUN = 40
+
+# Kesitsel momentum daha geniş bir kesit ister (sıralama anlamlı olsun diye).
+KESITSEL_EK = [
+    "TRXUSDT", "DOTUSDT", "ATOMUSDT", "APTUSDT",
+    "ARBUSDT", "OPUSDT", "FILUSDT", "SUIUSDT",
+]
 SONUC_KLASOR = os.path.join(os.path.dirname(__file__), "sonuclar")
 
 CFG_SECENEK = {
@@ -172,6 +179,76 @@ def komut_motor(args, veriler=None):
     return motor, sonuc
 
 
+def komut_kesitsel(args, veriler=None):
+    """Kesitsel momentum: uzun/kısa sepet backtesti (araştırma)."""
+    from backtest.kesitsel import calistir as kesitsel_calistir
+    from backtest.kesitsel import ozet, panel
+
+    if args.veri_uzun:
+        import backtest.veri as veri_modulu
+
+        veri_modulu.KLASOR = os.path.join(os.path.dirname(__file__), "veri_uzun")
+
+    semboller = args.sembol.split(",") if args.sembol else (SEMBOLLER + KESITSEL_EK)
+    veriler = veriler or verileri_yukle(semboller)
+    A, K = panel(veriler, args.tf)
+    bas = args.bas or str(K.index[0].date())
+    bit = args.bit or str(K.index[-1].date())
+
+    cfg = dict(
+        geri_bak=args.geri,
+        tut=args.tut,
+        adet=args.adet,
+        brut=args.brut,
+        agirlik=args.agirlik,
+        maliyet_modu=args.maliyet,
+    )
+    print(f"\n🧮 Kesitsel momentum — {len(veriler)} sembol, {args.tf}")
+    print(f"   geri_bak={args.geri} tut={args.tut} adet={args.adet} brüt={args.brut}x "
+          f"ağırlık={args.agirlik} maliyet={args.maliyet}")
+    print(f"   {bas} → {bit}\n")
+
+    if args.faz > 1:
+        # Canlıda giriş fazını seçemezsin: her fazı ayrı koş, medyanı göster.
+        # Dikkat: faz yalnızca `tut` modunda anlamlıdır (i += tut), yani
+        # benzersiz faz sayısı en fazla `tut` kadardır.
+        z = K.index
+        b0 = int(np.searchsorted(z, pd.Timestamp(bas)))
+        benzersiz = min(args.faz, args.tut)
+        getiriler, ddler, pozlar = [], [], []
+        for sh in range(benzersiz):
+            i = b0 + sh
+            if i >= len(z):
+                break
+            o = ozet(kesitsel_calistir(A, K, bas=z[i], bit=bit, **cfg))
+            if o["periyot"] >= 3:
+                getiriler.append(o["getiri"])
+                ddler.append(o["max_dd"])
+                pozlar.append(o["periyot"])
+        if not getiriler:
+            print("  yeterli veri yok")
+            return
+        g = np.array(getiriler)
+        print(f"  {len(g)} benzersiz faz (mod {args.tut})  medyan {np.median(g):+.1f}%  "
+              f"ort {g.mean():+.1f}%")
+        print(f"  min {g.min():+.1f}%  max {g.max():+.1f}%  medyan DD %{np.median(ddler):.1f}  "
+              f"pozitif faz {int((g > 0).sum())}/{len(g)}  işlem≈{int(np.median(pozlar))}")
+        if len(g) > 1 and g.max() - g.min() > 40:
+            print("  ⚠ fazlar arası fark çok geniş: sonuç giriş zamanına aşırı duyarlı,"
+                  " yani kenar zayıf.")
+        return
+
+    sonuc = kesitsel_calistir(A, K, bas=bas, bit=bit, **cfg)
+    o = ozet(sonuc)
+    print(f"  İşlem (dengeleme) : {o['periyot']}")
+    print(f"  Net getiri        : {o['getiri']:+.1f}%  (${o['son']:.2f})")
+    print(f"  Aylık bileşik     : %{o['aylik']:.2f}")
+    print(f"  Kazanma oranı     : %{o['wr']:.1f}")
+    print(f"  Max drawdown      : %{o['max_dd']:.1f}")
+    print(f"  Maliyet           : ${o['maliyet']:.2f}")
+    return sonuc
+
+
 def komut_hepsi(args):
     veriler = verileri_yukle()
     komut_analiz(args, veriler)
@@ -183,10 +260,27 @@ def komut_hepsi(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="FATIH V6 backtest araçları")
     parser.add_argument(
-        "komut", choices=["indir", "analiz", "motor", "hepsi"], nargs="?", default="hepsi"
+        "komut", choices=["indir", "analiz", "motor", "kesitsel", "hepsi"],
+        nargs="?", default="hepsi",
     )
     parser.add_argument("cfg", nargs="?", default="v63", choices=list(CFG_SECENEK))
     parser.add_argument("--zorla", action="store_true", help="önbelleği yok say")
+    # kesitsel komutu
+    parser.add_argument("--tf", default="4h", choices=["1h", "4h", "1d"])
+    parser.add_argument("--geri", type=int, default=12, help="geri bakış barı")
+    parser.add_argument("--tut", type=int, default=24, help="tutma barı")
+    parser.add_argument("--adet", type=int, default=3, help="her tarafta kaç coin")
+    parser.add_argument("--brut", type=float, default=1.0, help="brüt maruz kalma (kaldıraç)")
+    parser.add_argument("--agirlik", default="sira", choices=["esit", "ters_vol", "sira"])
+    parser.add_argument("--maliyet", default="fark", choices=["tam", "fark"],
+                        help="tam: her dengelemede tüm kitap kapanır (kötümser)")
+    parser.add_argument("--faz", type=int, default=1,
+                        help="faz sayısı; >1 ise faz medyanı raporlanır (canlıya daha yakın)")
+    parser.add_argument("--sembol", default="", help="virgülle ayrılmış sembol listesi")
+    parser.add_argument("--bas", default="", help="YYYY-MM-DD")
+    parser.add_argument("--bit", default="", help="YYYY-MM-DD")
+    parser.add_argument("--veri-uzun", action="store_true",
+                        help="backtest/veri_uzun önbelleğini kullan (4 yıllık veri)")
     args = parser.parse_args(argv)
 
     if args.komut == "indir":
@@ -195,6 +289,8 @@ def main(argv=None):
         komut_analiz(args)
     elif args.komut == "motor":
         komut_motor(args)
+    elif args.komut == "kesitsel":
+        komut_kesitsel(args)
     else:
         komut_hepsi(args)
 

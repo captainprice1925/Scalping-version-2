@@ -331,6 +331,30 @@ taşıma **spot bacak** ister (hesap yapısı, teminat yönetimi, iki bacağın
 eşzamanlı açılması, perp bacağında likidasyon koruması). Ayrı bir modül gerekir,
 mevcut V6 sinyal motoruyla ilgisi yok.
 
+## Karar — yeni sistem eklenmiyor (2026-11-20)
+
+Üç yol ölçüldü, üçü de 10 ayda 10× hedefini karşılamıyor:
+
+| Yol | Ölçüm | Sonuç |
+|---|---|---|
+| Mevcut V6 (1h sinyal) | 10 aylık motor, EV ≈ 0 | Kenar yok |
+| Kesitsel momentum (4h, 23 sembol, 4 yıl) | faz medyanı +%20/4 yıl, DD %52 | Kenar yok |
+| Fonlama taşıması (delta-nötr, 4 yıl) | yılda +%4, DD %2 | Kenar **var** ama küçük |
+
+**Gerekçe:** 10 ayda 10× = ayda +%26. En sağlam bulunan yol yılda +%4. Aradaki
+fark daha iyi bir indikatörle kapanmaz; 100$ sermayede yılda %20 getiren kusursuz
+bir sistem bile yılda 20$ eder. Darboğaz strateji değil, sermaye.
+
+**Bundan sonra yapılmayacaklar:** yeni indikatör/sinyal ailesi denemeleri, yeni
+kaldıraç/kumar modları, fiyat deseni tabanlı yeni sistemler. İki araştırma aracı
+(`backtest/kesitsel.py`, `backtest/fonlama.py`) belgelenmiş halde duruyor; veri
+önbelleği `backtest/veri_uzun/` ve `backtest/fonlama/` altında (git dışı), yani
+istenirse tek komutla tekrar koşulur.
+
+**Açık kalan tek iş:** V6.3/V6.4 paper doğrulaması. ~40 işlemde `/istatistik` ve
+`/state` geldiğinde önceden kayıtlı kapı (≥60 işlem, ≥+5 bps, WR ≥ %57, DD ≤ %15)
+değerlendirilir; tutmazsa `BARAJ_GENISLETME = 1.0`'a dönülür ve bot paper'da kalır.
+
 ## References
 
 [1]: https://www.gate.com/help/futures/futures_logic/22079 "Futures Trading Fee Calculation | Gate"

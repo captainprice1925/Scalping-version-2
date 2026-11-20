@@ -8,4 +8,5 @@ scalp_bot_state.json
 # Backtest çıktıları — veri ve sonuçlar repoya girmez
 backtest/veri/
 backtest/veri_uzun/
+backtest/fonlama/
 backtest/sonuclar/

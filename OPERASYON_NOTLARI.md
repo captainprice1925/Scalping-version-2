@@ -294,6 +294,43 @@ kaydediyordu; 4 yıllık indirmede panel `object` dtype'a düşüp karşılaşt�
 bozuyordu. `indir_binance` artık OHLCV'yi sayıya çeviriyor, `panel` de `float`'a
 zorluyor.
 
+## Fonlama taşıması — ölçüldü, gerçek ama küçük
+
+Yön tahmini gerektirmeyen tek kripto primi: **delta-nötr taşıma**. Spot'ta al,
+aynı notionalda vadeli short; fiyat nereye giderse gitsin iki bacak birbirini
+götürür, kazanç yalnızca fonlamadan gelir (pozitif fonlamada short **alır**).
+Sermaye = `notional * (1 + 1/kaldıraç)`; getiri sermayeye göre raporlanır.
+
+Araç: `backtest/fonlama.py` + `python -m backtest.calistir fonlama`.
+Veri: 23 sembol, Binance USDT-M fonlama geçmişi, 2022-11 → 2026-11.
+
+**Sonuç (100$ sermaye, 4 yıl):**
+
+| Kural | Toplam | Yıllık | Max DD | 100$ → |
+|---|---|---|---|---|
+| Eşik %0.01 (yalnız yüksek fonlama) | +%10.8 | +%2.7 | %0.2 | 110.75$ |
+| Al-tut, 5× | +%16.3 | +%3.9 | %1.8 | 116.28$ |
+| Al-tut, 10× | +%17.9 | +%4.2 | %1.9 | 117.88$ |
+| Al-tut, 20× | +%18.8 | +%4.4 | %2.0 | 118.81$ |
+
+- 23 sembolün **tamamı** pozitif (medyan +%11.6); hiçbir yıl negatif değil.
+- Ham fonlama medyanı yıllık **+%6.7** (4/23 sembolde negatif: BNB, TRX, ATOM, APT).
+- Eşiksiz taşıma **maliyetle ölüyor**: 300-560 tur → −%57. Devir hızı kritik.
+- Kaldıraç 5×'ten sonra neredeyse hiçbir şey eklemiyor; 20× likidasyon riskini
+  bedava almış olursun. Önerilen: 3-5×.
+- **$100'de yapısal sınır:** 23 sembol eşit ağırlık ≈ sembol başına 4.3$, minimum
+  emir tutarının altında. Gerçekçi olarak 2-3 sembol (BTC/ETH/SOL) → yılda ~3$.
+
+**Yorum:** Bu gerçek bir risk primi (perakende long tarafı fonlama ödüyor) ama
+getirisi yılda %3-4. 100$ → 1000$ için buradan çıkacak para yılda ~3$; yani
+10× hedefi bu yolla da ulaşılamaz. Yine de "parayı koru" hedefi için en sağlam
+araç bu: DD %2, her yıl pozitif.
+
+**Canlıya almanın bedeli:** mevcut bot yalnızca Gate vadeli işlem yapıyor;
+taşıma **spot bacak** ister (hesap yapısı, teminat yönetimi, iki bacağın
+eşzamanlı açılması, perp bacağında likidasyon koruması). Ayrı bir modül gerekir,
+mevcut V6 sinyal motoruyla ilgisi yok.
+
 ## References
 
 [1]: https://www.gate.com/help/futures/futures_logic/22079 "Futures Trading Fee Calculation | Gate"

@@ -249,6 +249,49 @@ def komut_kesitsel(args, veriler=None):
     return sonuc
 
 
+def komut_fonlama(args, veriler=None):
+    """Fonlama taşıması (delta-nötr) — yön tahmini gerektirmeyen prim."""
+    from backtest.fonlama import indir_fonlama, ozet, tasima
+
+    semboller = args.sembol.split(",") if args.sembol else (SEMBOLLER + KESITSEL_EK)
+    sonuclar = {}
+    print(f"\n💰 Fonlama taşıması — {len(semboller)} sembol")
+    print(f"   giriş eşiği {args.esik:.4f}%  çıkış {args.cikis:.4f}%  "
+          f"kaldıraç {args.kaldirac:.0f}x  komisyon {args.komisyon * 1e4:.0f} + "
+          f"kayma {args.kayma * 1e4:.0f} bps\n")
+    for sembol in semboller:
+        df = indir_fonlama(sembol, gun=args.gun)
+        if df.empty:
+            continue
+        sonuclar[sembol] = tasima(
+            df,
+            esik=args.esik / 100,
+            cikis_esigi=args.cikis / 100,
+            komisyon=args.komisyon,
+            kayma=args.kayma,
+            kaldirac=args.kaldirac,
+            bas=args.bas or None,
+            bit=args.bit or None,
+        )
+    if not sonuclar:
+        print("  veri yok")
+        return
+
+    satirlar = []
+    for sembol, r in sonuclar.items():
+        o = ozet(r)
+        satirlar.append(
+            {"sembol": sembol, "getiri%": o["getiri"], "yıllık%": o["yillik"],
+             "DD%": o["max_dd"], "tur": o["pozisyon"], "maruz%": o["maruz_gun"]}
+        )
+    tablo = pd.DataFrame(satirlar).sort_values("getiri%", ascending=False)
+    print(tablo.to_string(index=False))
+    print(f"\n  medyan getiri %{tablo['getiri%'].median():.1f}  "
+          f"ort %{tablo['getiri%'].mean():.1f}  "
+          f"negatif {int((tablo['getiri%'] < 0).sum())}/{len(tablo)}")
+    return tablo
+
+
 def komut_hepsi(args):
     veriler = verileri_yukle()
     komut_analiz(args, veriler)
@@ -260,7 +303,7 @@ def komut_hepsi(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="FATIH V6 backtest araçları")
     parser.add_argument(
-        "komut", choices=["indir", "analiz", "motor", "kesitsel", "hepsi"],
+        "komut", choices=["indir", "analiz", "motor", "kesitsel", "fonlama", "hepsi"],
         nargs="?", default="hepsi",
     )
     parser.add_argument("cfg", nargs="?", default="v63", choices=list(CFG_SECENEK))
@@ -281,6 +324,13 @@ def main(argv=None):
     parser.add_argument("--bit", default="", help="YYYY-MM-DD")
     parser.add_argument("--veri-uzun", action="store_true",
                         help="backtest/veri_uzun önbelleğini kullan (4 yıllık veri)")
+    # fonlama komutu
+    parser.add_argument("--esik", type=float, default=0.01, help="giris fonlama esigi (yuzde)")
+    parser.add_argument("--cikis", type=float, default=-0.0001, help="cikis fonlama esigi (yuzde)")
+    parser.add_argument("--kaldirac", type=float, default=5.0, help="perp bacağı kaldıracı")
+    parser.add_argument("--komisyon", type=float, default=0.0005, help="işlem komisyonu (oran)")
+    parser.add_argument("--kayma", type=float, default=0.0003, help="kayma (oran)")
+    parser.add_argument("--gun", type=int, default=1460, help="geriye kaç gün veri")
     args = parser.parse_args(argv)
 
     if args.komut == "indir":
@@ -291,6 +341,8 @@ def main(argv=None):
         komut_motor(args)
     elif args.komut == "kesitsel":
         komut_kesitsel(args)
+    elif args.komut == "fonlama":
+        komut_fonlama(args)
     else:
         komut_hepsi(args)
 

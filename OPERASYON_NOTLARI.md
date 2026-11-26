@@ -267,6 +267,18 @@ hatası ±16.6 puan. Ayırt etmek için 200-300 işlem gerekir. Mevcut hızda
 
 **Karar:** konfige dokunulmadı. 60 işlem beklenir, kapı tek seferde değerlendirilir.
 
+**Kapıyı elle tartışmamak için araç:** `backtest/kapi.py`. State dosyasını okur,
+dört ölçütü `/istatistik` ile birebir aynı tanımla (poz_id gruplaması, notional
+ağırlıklı bps) hesaplar ve hükmü basar:
+
+```bash
+python -m backtest.kapi --state scalp_bot_state.json
+```
+
+Çıktı üç durumdan biri olur: `HAZIR DEĞİL` (< 60 işlem, karar yok), `KAPI GEÇTİ`
+(2.0'da kalır), `KAPI KALDI` (hangi ölçüt düştüyse yazar, geri alma kuralı
+hatırlatılır). Tek yön uyarısı ve "en iyi işlem çıkarılınca net" satırı da basılır.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.
@@ -382,9 +394,29 @@ kaldıraç/kumar modları, fiyat deseni tabanlı yeni sistemler. İki araştırm
 önbelleği `backtest/veri_uzun/` ve `backtest/fonlama/` altında (git dışı), yani
 istenirse tek komutla tekrar koşulur.
 
-**Açık kalan tek iş:** V6.3/V6.4 paper doğrulaması. ~40 işlemde `/istatistik` ve
-`/state` geldiğinde önceden kayıtlı kapı (≥60 işlem, ≥+5 bps, WR ≥ %57, DD ≤ %15)
-değerlendirilir; tutmazsa `BARAJ_GENISLETME = 1.0`'a dönülür ve bot paper'da kalır.
+**Dış varlık listesi de ölçüldü (26.11.2026):** "BTC/ETH/SOL/XRP/DOGE + Mag7"
+sepeti, 5,5 yıl günlük veri, aylık dengeleme, tek yön 10 bps maliyet:
+
+| Kural | Yıllık | Max DD | 100$ → |
+|---|---|---|---|
+| Al-tut (tek alım) | +%15.6 | %70 | 221$ |
+| Al-tut (aylık denge) | +%23.0 | %62 | 311$ |
+| Zaman momentum 12 ay | +%13.8 | %42 | 203$ |
+| Kesitsel üst-3 (12 ay) | +%27.2 | %56 | 372$ |
+| Kesitsel üst-3 (**6 ay**) | +%7.0 | %61 | 145$ |
+| Kesitsel 3 uzun / 3 kısa | −%15.9 | %72 | 39$ |
+| SPY (referans) | +%11.7 | %24 | 183$ |
+
+Tek iyi satır (12 ay kesitsel) parametre adası: aynı fikrin 6 ay versiyonu
++%7/yıl. NVDA çıkarılınca +%27.2 → +%18.4. Kısa bacak yılda −%16. Kripto
+tarafında 5,5 yılda ETH −%7.5/yıl, DOGE −%27.8/yıl, XRP +%1.6/yıl; yalnız BTC
+(+%11.4) ve SOL (+%11.8) taşıdı. Sonuç: bu 12 varlıkta **tutmak, işlem yapmayı
+yendi**; kenar yok.
+
+**Açık kalan tek iş:** V6.3/V6.4 paper doğrulaması. 60 işleme ulaşınca kapı
+`python -m backtest.kapi --state <dosya>` ile bir kez değerlendirilir
+(≥60 işlem, ≥+5 bps, WR ≥ %57, DD ≤ %15); tutmazsa `BARAJ_GENISLETME = 1.0`'a
+dönülür ve bot paper'da kalır.
 
 ## References
 

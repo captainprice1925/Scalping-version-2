@@ -236,6 +236,37 @@ birimdir. `/istatistik` bu satırı artık basıyor:
 `BARAJ_GENISLETME = 1.0` yapılır ve V6.3 davranışına dönülür (tek satır, state
 uyumlu). Kapı geçilirse değer 2.0'da kalır ve yeni tur açılmaz.
 
+#### Ara okuma — 9 işlem (26.11.2026), karar değişmedi
+
+| Ölçüt | Değer | Kapı | Durum |
+|---|---|---|---|
+| İşlem | 9 | ≥ 60 | %15 |
+| Beklenti (notional) | +5.6 bps | ≥ +5 | kıl payı |
+| İşlem bazlı WR | %55.6 | ≥ %57 | altında |
+| Max DD | ~%2.2 | ≤ %15 | rahat |
+
+Bu sayılar **hiçbir şey kanıtlamaz**, üç sebepten:
+
+1. **Dokuz işlem bağımsız değil.** Dokuzunun tamamı SHORT ve dokuzunda da
+   `btc_yukari = false`. Yani tek bir rejimde, tek yönde alınmış bir bahis;
+   örneklem büyüklüğü 9 değil ~1. BTC rejimi dönünce farklı bir popülasyon
+   işlem görecek.
+2. **Tek işlem çıkarınca işaret dönüyor.** En iyi işlem (BTC +$1.04) çıkarılınca
+   toplam −$0.75 ve EV −14 bps. BTC sembolünü tamamen çıkarınca kalan 5 işlem
+   −$1.80. t-stat 0.12, EV %95 aralığı −107 … +121 bps.
+3. **Dolum iyimserliği payı küçük.** Çıkışların her biri 2 bps daha kötü
+   dolarsa EV +3.5 bps'e, 5 bps daha kötü dolarsa +0.5 bps'e düşer — yani kapı
+   kapanır. Ayrıca TP merdiveni tek mumda basamak basamak doluyor kabul ediliyor
+   (bir BTC işleminde TP1 ve TP2 0.18 sn arayla doldu); mum içi sıralama
+   bilinmediği için bu standart ama iyimser bir varsayım.
+
+**Kâr/beklenti geometrisi:** risk %1 (~$1.00), ortalama kazanç ~$0.86 → başabaş
+WR %53.8. Gerçekleşen %55.6, yani başabaşın 1.8 puan üstünde; WR standart
+hatası ±16.6 puan. Ayırt etmek için 200-300 işlem gerekir. Mevcut hızda
+(~1.5 işlem/gün) 60 işlem ≈ 40 gün.
+
+**Karar:** konfige dokunulmadı. 60 işlem beklenir, kapı tek seferde değerlendirilir.
+
 ## Dağıtım
 
 `Procfile`, `wsgi:app` ile tek Gunicorn worker ve tek thread kullanır. Birden fazla worker, aynı botun birden fazla kez başlamasına yol açacağı için desteklenmez. `wsgi.py` başlatıldığında bot thread'i tek sefer başlatılır.
